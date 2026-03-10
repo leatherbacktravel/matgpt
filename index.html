@@ -1,0 +1,860 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Voice Check — Leatherback Travel</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Playfair+Display:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #FAFAF8;
+      --bg-card: #FFFFFF;
+      --bg-input: #F5F4F0;
+      --text-primary: #1A1A1A;
+      --text-secondary: #5A5A5A;
+      --text-muted: #9A9A9A;
+      --border: #E8E6E1;
+      --border-focus: #00A99A;
+      --accent: #00A99A;
+      --accent-hover: #008F82;
+      --accent-light: #E6F7F5;
+      --strong: #1B8A6B;
+      --good: #2E86AB;
+      --developing: #D4940A;
+      --off-brand: #C44536;
+      --strong-bg: #EDFAF5;
+      --good-bg: #EDF5FA;
+      --developing-bg: #FDF6E6;
+      --off-brand-bg: #FCEEED;
+      --font-body: 'DM Sans', sans-serif;
+      --font-display: 'Playfair Display', Georgia, serif;
+    }
+
+    body {
+      min-height: 100vh;
+      background: var(--bg);
+      font-family: var(--font-body);
+      color: var(--text-primary);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ─── Header ─── */
+    header {
+      padding: 18px 40px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      background: #1A1A1A;
+    }
+
+    .logo-img {
+      height: 26px;
+      width: auto;
+    }
+
+    .header-divider {
+      width: 1px;
+      height: 18px;
+      background: #3A3A3A;
+    }
+
+    .header-label {
+      font-size: 13px;
+      font-weight: 500;
+      color: #888;
+      letter-spacing: 0.5px;
+    }
+
+    /* ─── Main ─── */
+    main {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 60px 32px 100px;
+    }
+
+    .hero {
+      margin-bottom: 48px;
+    }
+
+    .hero h1 {
+      font-family: var(--font-display);
+      font-size: clamp(28px, 4.5vw, 40px);
+      font-weight: 600;
+      line-height: 1.2;
+      color: var(--text-primary);
+      margin-bottom: 12px;
+      letter-spacing: -0.3px;
+    }
+
+    .hero h1 em {
+      color: var(--accent);
+      font-style: italic;
+      font-weight: 400;
+    }
+
+    .hero p {
+      font-size: 16px;
+      color: var(--text-secondary);
+      max-width: 480px;
+      line-height: 1.6;
+    }
+
+    /* ─── Input area ─── */
+    .input-section {
+      margin-bottom: 24px;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 0;
+      margin-bottom: 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .tab {
+      padding: 10px 20px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-muted);
+      cursor: pointer;
+      border: none;
+      background: none;
+      font-family: var(--font-body);
+      position: relative;
+      transition: color 0.2s;
+    }
+
+    .tab:hover { color: var(--text-secondary); }
+
+    .tab.active {
+      color: var(--accent);
+    }
+
+    .tab.active::after {
+      content: '';
+      position: absolute;
+      bottom: -1px;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: var(--accent);
+      border-radius: 2px 2px 0 0;
+    }
+
+    .tab-panel {
+      display: none;
+      padding-top: 16px;
+    }
+
+    .tab-panel.active {
+      display: block;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 200px;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px 20px;
+      font-size: 15px;
+      color: var(--text-primary);
+      font-family: var(--font-body);
+      line-height: 1.7;
+      resize: vertical;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    textarea:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(0, 169, 154, 0.1);
+    }
+
+    textarea::placeholder { color: var(--text-muted); }
+
+    .textarea-footer {
+      display: flex;
+      justify-content: flex-end;
+      padding: 6px 4px;
+    }
+
+    .word-count {
+      font-size: 12px;
+      color: var(--text-muted);
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* ─── Upload zone ─── */
+    .upload-zone {
+      border: 2px dashed var(--border);
+      border-radius: 8px;
+      padding: 48px 32px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      position: relative;
+    }
+
+    .upload-zone:hover, .upload-zone.dragover {
+      border-color: var(--accent);
+      background: var(--accent-light);
+    }
+
+    .upload-zone input[type="file"] {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+    }
+
+    .upload-icon {
+      width: 40px;
+      height: 40px;
+      margin: 0 auto 12px;
+      border-radius: 50%;
+      background: var(--accent-light);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .upload-icon svg {
+      width: 20px;
+      height: 20px;
+      color: var(--accent);
+    }
+
+    .upload-label {
+      font-size: 15px;
+      color: var(--text-primary);
+      font-weight: 500;
+      margin-bottom: 4px;
+    }
+
+    .upload-hint {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    .file-selected {
+      display: none;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 16px;
+      background: var(--accent-light);
+      border: 1px solid rgba(0, 169, 154, 0.2);
+      border-radius: 8px;
+      margin-top: 12px;
+    }
+
+    .file-selected.show {
+      display: flex;
+    }
+
+    .file-name {
+      font-size: 14px;
+      color: var(--text-primary);
+      font-weight: 500;
+      flex: 1;
+    }
+
+    .file-remove {
+      font-size: 12px;
+      color: var(--off-brand);
+      cursor: pointer;
+      background: none;
+      border: none;
+      font-family: var(--font-body);
+      font-weight: 500;
+    }
+
+    /* ─── Button ─── */
+    .check-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 14px 28px;
+      font-size: 15px;
+      font-weight: 600;
+      font-family: var(--font-body);
+      cursor: pointer;
+      transition: background 0.2s, transform 0.1s;
+      margin-bottom: 32px;
+    }
+
+    .check-btn:hover:not(:disabled) { background: var(--accent-hover); }
+    .check-btn:active:not(:disabled) { transform: scale(0.98); }
+    .check-btn:disabled { background: #CCC; cursor: not-allowed; }
+
+    /* ─── Loading ─── */
+    .loading {
+      display: none;
+      text-align: center;
+      padding: 48px 0;
+    }
+
+    .loading.show { display: block; }
+
+    .loading-spinner {
+      width: 36px;
+      height: 36px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      margin: 0 auto 16px;
+      animation: spin 0.7s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .loading-text {
+      font-size: 14px;
+      color: var(--text-muted);
+    }
+
+    .error-msg {
+      display: none;
+      padding: 12px 16px;
+      background: var(--off-brand-bg);
+      border: 1px solid rgba(196, 69, 54, 0.2);
+      border-radius: 8px;
+      color: var(--off-brand);
+      font-size: 14px;
+      margin-bottom: 24px;
+    }
+
+    .error-msg.show { display: block; }
+
+    /* ─── Results ─── */
+    #results {
+      display: none;
+    }
+
+    #results.show {
+      display: block;
+      animation: fadeUp 0.5s ease forwards;
+    }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(16px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .results-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 24px;
+    }
+
+    .results-title {
+      font-family: var(--font-display);
+      font-size: 24px;
+      font-weight: 600;
+    }
+
+    .export-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 10px 20px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: #fff;
+      color: var(--text-secondary);
+      font-size: 13px;
+      font-weight: 500;
+      font-family: var(--font-body);
+      cursor: pointer;
+      transition: border-color 0.2s, color 0.2s, background 0.2s;
+    }
+
+    .export-btn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: var(--accent-light);
+    }
+
+    .export-btn svg { width: 16px; height: 16px; }
+
+    /* ─── Category grades ─── */
+    .grades-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 32px;
+    }
+
+    @media (max-width: 560px) {
+      .grades-grid { grid-template-columns: 1fr; }
+    }
+
+    .grade-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px;
+      transition: box-shadow 0.2s;
+    }
+
+    .grade-card:hover {
+      box-shadow: 0 2px 12px rgba(0,0,0,0.04);
+    }
+
+    /* Span full width for odd last item */
+    .grade-card:last-child:nth-child(odd) {
+      grid-column: 1 / -1;
+    }
+
+    .grade-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+
+    .grade-cat-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .grade-badge {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 10px;
+      border-radius: 20px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .grade-badge[data-grade="Strong"] { background: var(--strong-bg); color: var(--strong); }
+    .grade-badge[data-grade="Good"] { background: var(--good-bg); color: var(--good); }
+    .grade-badge[data-grade="Developing"] { background: var(--developing-bg); color: var(--developing); }
+    .grade-badge[data-grade="Off-brand"] { background: var(--off-brand-bg); color: var(--off-brand); }
+
+    .grade-summary {
+      font-size: 14px;
+      color: var(--text-secondary);
+      line-height: 1.5;
+    }
+
+    /* ─── Feedback section ─── */
+    .feedback-section {
+      margin-bottom: 32px;
+    }
+
+    .feedback-heading {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .feedback-item {
+      padding: 20px 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .feedback-item:last-child { border-bottom: none; }
+
+    .feedback-section-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+    }
+
+    .feedback-quote {
+      font-size: 14px;
+      color: var(--text-muted);
+      font-style: italic;
+      padding-left: 12px;
+      border-left: 3px solid var(--border);
+      margin-bottom: 10px;
+      line-height: 1.5;
+    }
+
+    .feedback-comment {
+      font-size: 14px;
+      color: var(--text-primary);
+      line-height: 1.6;
+      margin-bottom: 10px;
+    }
+
+    .feedback-suggestion {
+      font-size: 14px;
+      line-height: 1.5;
+      padding: 10px 14px;
+      background: var(--strong-bg);
+      border-radius: 6px;
+      color: var(--strong);
+    }
+
+    .feedback-suggestion strong {
+      font-weight: 600;
+    }
+
+    /* ─── Reset ─── */
+    .reset-btn {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      border-radius: 8px;
+      padding: 10px 24px;
+      font-size: 13px;
+      font-weight: 500;
+      font-family: var(--font-body);
+      cursor: pointer;
+      transition: border-color 0.2s, color 0.2s;
+    }
+
+    .reset-btn:hover { border-color: var(--text-secondary); color: var(--text-secondary); }
+
+    /* ─── Footer ─── */
+    .page-footer {
+      text-align: center;
+      padding: 32px;
+      font-size: 12px;
+      color: var(--text-muted);
+      border-top: 1px solid var(--border);
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <svg class="logo-img" viewBox="0 0 220 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <!-- Turtle icon - organic pebble shapes -->
+      <ellipse cx="12" cy="16" rx="7" ry="9" fill="white" transform="rotate(-15 12 16)"/>
+      <ellipse cx="23" cy="10" rx="5" ry="6.5" fill="white" transform="rotate(10 23 10)"/>
+      <ellipse cx="30" cy="20" rx="4.5" ry="6" fill="white" transform="rotate(25 30 20)"/>
+      <ellipse cx="20" cy="24" rx="5" ry="4.5" fill="white" transform="rotate(-5 20 24)"/>
+      <ellipse cx="8" cy="28" rx="4" ry="3" fill="white" transform="rotate(-20 8 28)"/>
+      <!-- Wordmark -->
+      <text x="44" y="26" font-family="'DM Sans', sans-serif" font-weight="700" font-size="20" fill="white" letter-spacing="0.5">Leatherback</text>
+    </svg>
+    <div class="header-divider"></div>
+    <span class="header-label">Voice Check</span>
+  </header>
+
+  <main>
+    <div class="hero">
+      <h1>Check the <em>voice</em></h1>
+      <p>Paste or upload your content and get detailed feedback on how well it matches the Leatherback voice.</p>
+    </div>
+
+    <div class="input-section">
+      <div class="tabs">
+        <button class="tab active" data-tab="paste">Paste text</button>
+        <button class="tab" data-tab="upload">Upload file</button>
+      </div>
+
+      <div class="tab-panel active" id="panel-paste">
+        <textarea id="input" placeholder="Paste your email, blog post, newsletter, or any content here..."></textarea>
+        <div class="textarea-footer">
+          <span class="word-count" id="wordCount"></span>
+        </div>
+      </div>
+
+      <div class="tab-panel" id="panel-upload">
+        <div class="upload-zone" id="uploadZone">
+          <input type="file" id="fileInput" accept=".docx,.pdf,.txt,.md" />
+          <div class="upload-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          </div>
+          <div class="upload-label">Drop a file here, or click to browse</div>
+          <div class="upload-hint">.docx, .pdf, or .txt</div>
+        </div>
+        <div class="file-selected" id="fileSelected">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          <span class="file-name" id="fileName"></span>
+          <button class="file-remove" id="fileRemove">Remove</button>
+        </div>
+      </div>
+    </div>
+
+    <button class="check-btn" id="checkBtn" disabled>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+      Check the voice
+    </button>
+
+    <div class="loading" id="loading">
+      <div class="loading-spinner"></div>
+      <div class="loading-text">Reviewing your content...</div>
+    </div>
+
+    <div class="error-msg" id="error"></div>
+
+    <div id="results">
+      <div class="results-header">
+        <span class="results-title">Results</span>
+        <button class="export-btn" id="exportBtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Download as .docx
+        </button>
+      </div>
+
+      <div class="grades-grid" id="gradesGrid"></div>
+
+      <div class="feedback-section">
+        <div class="feedback-heading" id="feedbackHeading">Detailed Feedback</div>
+        <div id="feedbackList"></div>
+      </div>
+
+      <button class="reset-btn" id="resetBtn">Check something else</button>
+    </div>
+  </main>
+
+  <div class="page-footer">Leatherback Travel &mdash; Internal Tool</div>
+
+  <script>
+    // ─── State ───
+    let currentResult = null;
+    let currentText = null;
+    let selectedFile = null;
+
+    const input = document.getElementById("input");
+    const checkBtn = document.getElementById("checkBtn");
+    const loading = document.getElementById("loading");
+    const errorEl = document.getElementById("error");
+    const results = document.getElementById("results");
+    const wordCount = document.getElementById("wordCount");
+    const fileInput = document.getElementById("fileInput");
+    const fileSelected = document.getElementById("fileSelected");
+    const fileName = document.getElementById("fileName");
+    const fileRemove = document.getElementById("fileRemove");
+    const uploadZone = document.getElementById("uploadZone");
+    const exportBtn = document.getElementById("exportBtn");
+    const resetBtn = document.getElementById("resetBtn");
+
+    // ─── Tabs ───
+    document.querySelectorAll(".tab").forEach(tab => {
+      tab.addEventListener("click", () => {
+        document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+        document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
+        tab.classList.add("active");
+        document.getElementById("panel-" + tab.dataset.tab).classList.add("active");
+        updateCheckBtn();
+      });
+    });
+
+    // ─── Textarea ───
+    input.addEventListener("input", () => {
+      const words = input.value.trim().split(/\s+/).filter(Boolean).length;
+      wordCount.textContent = input.value.trim() ? words + " words" : "";
+      updateCheckBtn();
+    });
+
+    // ─── File upload ───
+    fileInput.addEventListener("change", (e) => {
+      if (e.target.files.length) {
+        selectedFile = e.target.files[0];
+        fileName.textContent = selectedFile.name;
+        fileSelected.classList.add("show");
+        uploadZone.style.display = "none";
+        updateCheckBtn();
+      }
+    });
+
+    fileRemove.addEventListener("click", () => {
+      selectedFile = null;
+      fileInput.value = "";
+      fileSelected.classList.remove("show");
+      uploadZone.style.display = "";
+      updateCheckBtn();
+    });
+
+    // Drag & drop
+    uploadZone.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      uploadZone.classList.add("dragover");
+    });
+    uploadZone.addEventListener("dragleave", () => uploadZone.classList.remove("dragover"));
+    uploadZone.addEventListener("drop", (e) => {
+      e.preventDefault();
+      uploadZone.classList.remove("dragover");
+      if (e.dataTransfer.files.length) {
+        selectedFile = e.dataTransfer.files[0];
+        fileName.textContent = selectedFile.name;
+        fileSelected.classList.add("show");
+        uploadZone.style.display = "none";
+        // Also set the file input
+        const dt = new DataTransfer();
+        dt.items.add(selectedFile);
+        fileInput.files = dt.files;
+        updateCheckBtn();
+      }
+    });
+
+    function updateCheckBtn() {
+      const activeTab = document.querySelector(".tab.active").dataset.tab;
+      if (activeTab === "paste") {
+        checkBtn.disabled = !input.value.trim();
+      } else {
+        checkBtn.disabled = !selectedFile;
+      }
+    }
+
+    // ─── Check ───
+    checkBtn.addEventListener("click", async () => {
+      const activeTab = document.querySelector(".tab.active").dataset.tab;
+
+      checkBtn.disabled = true;
+      loading.classList.add("show");
+      errorEl.classList.remove("show");
+      results.classList.remove("show");
+
+      try {
+        let res;
+
+        if (activeTab === "upload" && selectedFile) {
+          const formData = new FormData();
+          formData.append("file", selectedFile);
+          res = await fetch("/api/check", { method: "POST", body: formData });
+        } else {
+          res = await fetch("/api/check", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text: input.value.trim() }),
+          });
+        }
+
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+
+        currentResult = data;
+        currentText = data._originalText || input.value.trim();
+        renderResults(data);
+      } catch (e) {
+        errorEl.textContent = e.message || "Something went wrong. Try again.";
+        errorEl.classList.add("show");
+      }
+
+      loading.classList.remove("show");
+      updateCheckBtn();
+    });
+
+    // ─── Render ───
+    const catNames = {
+      tone: "Tone & Warmth",
+      structure: "Structure & Rhythm",
+      authenticity: "Authenticity",
+      language: "Language",
+      personality: "Personality"
+    };
+
+    function renderResults(data) {
+      // Grades
+      const grid = document.getElementById("gradesGrid");
+      grid.innerHTML = "";
+
+      if (data.categories) {
+        Object.entries(data.categories).forEach(([key, val]) => {
+          const card = document.createElement("div");
+          card.className = "grade-card";
+          card.innerHTML = `
+            <div class="grade-card-header">
+              <span class="grade-cat-name">${catNames[key] || key}</span>
+              <span class="grade-badge" data-grade="${val.grade}">${val.grade}</span>
+            </div>
+            <div class="grade-summary">${val.summary}</div>
+          `;
+          grid.appendChild(card);
+        });
+      }
+
+      // Feedback
+      const list = document.getElementById("feedbackList");
+      list.innerHTML = "";
+
+      if (data.feedback?.length) {
+        document.getElementById("feedbackHeading").textContent = `Detailed Feedback (${data.feedback.length} items)`;
+        data.feedback.forEach(item => {
+          const div = document.createElement("div");
+          div.className = "feedback-item";
+          div.innerHTML = `
+            <div class="feedback-section-label">${item.section}</div>
+            <div class="feedback-quote">"${item.quote}"</div>
+            <div class="feedback-comment">${item.comment}</div>
+            ${item.suggestion ? `<div class="feedback-suggestion"><strong>Try:</strong> ${item.suggestion}</div>` : ""}
+          `;
+          list.appendChild(div);
+        });
+      }
+
+      results.classList.add("show");
+    }
+
+    // ─── Export docx ───
+    exportBtn.addEventListener("click", async () => {
+      if (!currentResult) return;
+
+      exportBtn.disabled = true;
+      exportBtn.textContent = "Generating...";
+
+      try {
+        const res = await fetch("/api/export-docx", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            categories: currentResult.categories,
+            feedback: currentResult.feedback,
+            originalText: currentText,
+          }),
+        });
+
+        if (!res.ok) throw new Error("Export failed");
+
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "voice-check-feedback.docx";
+        a.click();
+        URL.revokeObjectURL(url);
+      } catch (e) {
+        errorEl.textContent = "Could not generate the document. Try again.";
+        errorEl.classList.add("show");
+      }
+
+      exportBtn.disabled = false;
+      exportBtn.innerHTML = `
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Download as .docx
+      `;
+    });
+
+    // ─── Reset ───
+    resetBtn.addEventListener("click", () => {
+      results.classList.remove("show");
+      errorEl.classList.remove("show");
+      input.value = "";
+      wordCount.textContent = "";
+      selectedFile = null;
+      fileInput.value = "";
+      fileSelected.classList.remove("show");
+      uploadZone.style.display = "";
+      currentResult = null;
+      currentText = null;
+      checkBtn.disabled = true;
+      input.focus();
+    });
+  </script>
+</body>
+</html>
