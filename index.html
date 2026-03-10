@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Style Checker — Leatherback Travel</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      min-height: 100vh;
+      background: #0f0e0c;
+      font-family: 'Georgia', serif;
+      color: #e8e2d9;
+    }
+
+    header {
+      border-bottom: 1px solid #2a2620;
+      padding: 24px 40px;
+      display: flex;
+      align-items: baseline;
+      gap: 16px;
+    }
+
+    .brand { font-size: 11px; letter-spacing: 3px; text-transform: uppercase; color: #c8712a; }
+    .divider { color: #3a3530; font-size: 11px; }
+    .subbrand { font-size: 11px; letter-spacing: 3px; text-transform: uppercase; color: #6b6358; }
+
+    main { max-width: 780px; margin: 0 auto; padding: 56px 40px 80px; }
+
+    h1 {
+      font-size: clamp(32px, 5vw, 48px);
+      font-weight: normal;
+      line-height: 1.15;
+      margin-bottom: 16px;
+      color: #f0ece6;
+      letter-spacing: -0.5px;
+    }
+
+    h1 em { color: #c8712a; font-style: italic; }
+
+    .subtitle {
+      font-size: 15px;
+      color: #7a7168;
+      line-height: 1.6;
+      max-width: 460px;
+      margin-bottom: 48px;
+    }
+
+    .input-wrap { position: relative; margin-bottom: 20px; }
+
+    textarea {
+      width: 100%;
+      min-height: 220px;
+      background: #191714;
+      border: 1px solid #2e2a25;
+      border-radius: 4px;
+      padding: 20px;
+      font-size: 15px;
+      color: #d8d2c9;
+      font-family: 'Georgia', serif;
+      line-height: 1.7;
+      resize: vertical;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    textarea:focus { border-color: #c8712a; }
+    textarea::placeholder { color: #3a3530; }
+
+    .word-count {
+      position: absolute;
+      bottom: 12px;
+      right: 16px;
+      font-size: 11px;
+      color: #4a4540;
+      font-family: monospace;
+      display: none;
+    }
+
+    button.primary {
+      background: #c8712a;
+      color: #fff;
+      border: none;
+      border-radius: 3px;
+      padding: 14px 32px;
+      font-size: 13px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      font-family: 'Georgia', serif;
+      cursor: pointer;
+      transition: background 0.2s, opacity 0.2s;
+      margin-bottom: 48px;
+    }
+
+    button.primary:disabled { background: #2a2620; color: #4a4540; cursor: not-allowed; }
+
+    button.secondary {
+      background: transparent;
+      border: 1px solid #2e2a25;
+      color: #6b6358;
+      border-radius: 3px;
+      padding: 10px 24px;
+      font-size: 12px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      font-family: 'Georgia', serif;
+      cursor: pointer;
+      transition: border-color 0.2s, color 0.2s;
+    }
+
+    button.secondary:hover { border-color: #5a5248; color: #9a9288; }
+
+    /* Spinner */
+    .spinner-wrap {
+      display: none;
+      text-align: center;
+      padding: 40px 0;
+      color: #6b6358;
+      font-size: 14px;
+      letter-spacing: 1px;
+    }
+
+    .spinner {
+      width: 32px; height: 32px;
+      border: 2px solid #2a2620;
+      border-top: 2px solid #c8712a;
+      border-radius: 50%;
+      margin: 0 auto 16px;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .error { color: #f87171; font-size: 14px; padding: 16px 0; display: none; }
+
+    /* Results */
+    #results { display: none; animation: fadeUp 0.4s ease forwards; opacity: 0; }
+    @keyframes fadeUp { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
+
+    .score-block {
+      display: flex;
+      align-items: center;
+      gap: 24px;
+      margin-bottom: 24px;
+      padding: 28px;
+      background: #141210;
+      border-radius: 4px;
+      border-left: 4px solid;
+    }
+
+    .score-number { font-size: 52px; font-weight: normal; line-height: 1; }
+    .score-denom { font-size: 10px; letter-spacing: 2px; text-transform: uppercase; opacity: 0.8; margin-top: 4px; }
+    .score-label { font-size: 13px; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 6px; }
+    .score-verdict { font-size: 16px; color: #d8d2c9; line-height: 1.5; font-style: italic; }
+
+    .panel {
+      border-radius: 4px;
+      padding: 20px 24px;
+      margin-bottom: 20px;
+    }
+
+    .panel-label {
+      font-size: 10px;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      margin-bottom: 16px;
+    }
+
+    .strengths-panel { background: #111210; border: 1px solid #1e2a1e; }
+    .strengths-panel .panel-label { color: #4ade80; }
+
+    .strength-item { display: flex; gap: 10px; margin-bottom: 10px; }
+    .strength-tick { color: #4ade80; flex-shrink: 0; }
+    .strength-text { font-size: 14px; color: #b0aa9f; line-height: 1.5; }
+
+    .issues-panel { background: #130f0e; border: 1px solid #2a1a15; margin-bottom: 32px; }
+    .issues-panel .panel-label { color: #f87171; }
+
+    .issue-item { margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid #2a1a15; }
+    .issue-item:last-child { margin-bottom: 0; padding-bottom: 0; border-bottom: none; }
+    .issue-quote { font-size: 13px; color: #7a6058; font-style: italic; margin-bottom: 6px; }
+    .issue-problem { font-size: 14px; color: #c87060; margin-bottom: 6px; line-height: 1.5; }
+    .issue-fix { font-size: 14px; color: #8ab88a; line-height: 1.5; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <span class="brand">Leatherback Travel</span>
+    <span class="divider">|</span>
+    <span class="subbrand">Style Checker</span>
+  </header>
+
+  <main>
+    <h1>Does it sound<br /><em>like Mat?</em></h1>
+    <p class="subtitle">Paste any content below — email, blog post, update — and get instant feedback against Mat's voice.</p>
+
+    <div class="input-wrap">
+      <textarea id="input" placeholder="Paste content here..."></textarea>
+      <span class="word-count" id="wordCount">0 words</span>
+    </div>
+
+    <button class="primary" id="checkBtn" disabled>Check the style</button>
+
+    <div class="spinner-wrap" id="spinner">
+      <div class="spinner"></div>
+      Reading it like Mat would...
+    </div>
+
+    <div class="error" id="error"></div>
+
+    <div id="results">
+      <div class="score-block" id="scoreBlock">
+        <div style="text-align:center; min-width:72px;">
+          <div class="score-number" id="scoreNumber"></div>
+          <div class="score-denom">/10</div>
+        </div>
+        <div>
+          <div class="score-label" id="scoreLabel"></div>
+          <div class="score-verdict" id="scoreVerdict"></div>
+        </div>
+      </div>
+
+      <div class="panel strengths-panel" id="strengthsPanel">
+        <div class="panel-label">What's working</div>
+        <div id="strengthsList"></div>
+      </div>
+
+      <div class="panel issues-panel" id="issuesPanel">
+        <div class="panel-label" id="issuesLabel">Fixes</div>
+        <div id="issuesList"></div>
+      </div>
+
+      <button class="secondary" id="resetBtn">Check something else</button>
+    </div>
+  </main>
+
+  <script>
+    const input = document.getElementById("input");
+    const checkBtn = document.getElementById("checkBtn");
+    const spinner = document.getElementById("spinner");
+    const errorEl = document.getElementById("error");
+    const results = document.getElementById("results");
+    const wordCount = document.getElementById("wordCount");
+    const resetBtn = document.getElementById("resetBtn");
+
+    input.addEventListener("input", () => {
+      const words = input.value.trim().split(/\s+/).filter(Boolean).length;
+      wordCount.style.display = input.value.trim() ? "block" : "none";
+      wordCount.textContent = words + " words";
+      checkBtn.disabled = !input.value.trim();
+    });
+
+    const scoreColor = (s) => s >= 8 ? "#4ade80" : s >= 6 ? "#facc15" : "#f87171";
+    const scoreLabel = (s) => s >= 9 ? "Nailed it" : s >= 8 ? "Very Mat" : s >= 6 ? "Getting there" : s >= 4 ? "Needs work" : "Not Mat";
+
+    checkBtn.addEventListener("click", async () => {
+      const text = input.value.trim();
+      if (!text) return;
+
+      checkBtn.disabled = true;
+      spinner.style.display = "block";
+      errorEl.style.display = "none";
+      results.style.display = "none";
+
+      try {
+        const res = await fetch("/api/check", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text }),
+        });
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+        renderResults(data);
+      } catch (e) {
+        errorEl.textContent = e.message || "Something went wrong. Try again.";
+        errorEl.style.display = "block";
+      }
+
+      spinner.style.display = "none";
+      checkBtn.disabled = false;
+    });
+
+    function renderResults(data) {
+      const color = scoreColor(data.score);
+
+      // Score block
+      const scoreBlock = document.getElementById("scoreBlock");
+      scoreBlock.style.borderColor = color;
+      scoreBlock.style.borderLeftColor = color;
+
+      document.getElementById("scoreNumber").textContent = data.score;
+      document.getElementById("scoreNumber").style.color = color;
+      const lbl = document.getElementById("scoreLabel");
+      lbl.textContent = scoreLabel(data.score);
+      lbl.style.color = color;
+      document.getElementById("scoreVerdict").textContent = `"${data.verdict}"`;
+
+      // Strengths
+      const sl = document.getElementById("strengthsList");
+      sl.innerHTML = "";
+      (data.strengths || []).forEach(s => {
+        sl.innerHTML += `<div class="strength-item"><span class="strength-tick">✓</span><span class="strength-text">${s}</span></div>`;
+      });
+      document.getElementById("strengthsPanel").style.display = data.strengths?.length ? "block" : "none";
+
+      // Issues
+      const il = document.getElementById("issuesList");
+      il.innerHTML = "";
+      (data.issues || []).forEach(item => {
+        il.innerHTML += `
+          <div class="issue-item">
+            <div class="issue-quote">"${item.quote}"</div>
+            <div class="issue-problem">${item.issue}</div>
+            ${item.fix ? `<div class="issue-fix">→ ${item.fix}</div>` : ""}
+          </div>`;
+      });
+      document.getElementById("issuesLabel").textContent = `Fixes (${data.issues?.length || 0})`;
+      document.getElementById("issuesPanel").style.display = data.issues?.length ? "block" : "none";
+
+      results.style.display = "block";
+      results.style.opacity = 0;
+      setTimeout(() => results.style.opacity = 1, 10);
+    }
+
+    resetBtn.addEventListener("click", () => {
+      results.style.display = "none";
+      input.value = "";
+      wordCount.style.display = "none";
+      checkBtn.disabled = true;
+      input.focus();
+    });
+  </script>
+</body>
+</html>
