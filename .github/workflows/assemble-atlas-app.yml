@@ -1,0 +1,49 @@
+name: Assemble Licensing Atlas App
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [gh-pages]
+    paths:
+      - 'atlas/app-parts/**'
+      - '.github/workflows/assemble-atlas-app.yml'
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: assemble-licensing-atlas-app
+  cancel-in-progress: true
+
+jobs:
+  assemble:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out site branch
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          fetch-depth: 1
+
+      - name: Assemble and validate application bundle
+        run: |
+          cat atlas/app-parts/app-*.part > atlas/app.js
+          node --check atlas/app.js
+          test "$(wc -c < atlas/app.js)" -gt 25000
+          grep -q 'database-v3' atlas/app.js
+          grep -q 'Licensing-market database' atlas/app.js
+
+      - name: Publish assembled application
+        run: |
+          git config user.name 'Leatherback Licensing Atlas Bot'
+          git config user.email 'matthew@leatherbacktravel.com'
+          git pull --rebase origin gh-pages
+          git add atlas/app.js
+          if git diff --cached --quiet; then
+            echo 'Application bundle unchanged.'
+          else
+            git commit -m 'Publish database-driven Licensing Atlas application'
+            git push origin HEAD:gh-pages
+          fi
