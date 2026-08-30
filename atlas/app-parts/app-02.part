@@ -1,0 +1,96 @@
+          ['Rejected or unresolved', m.rejected_or_unresolved_brand_strings],
+          ['Raw evidence retained', m.raw_evidence_records],
+        ].map(([label, value]) => `<div class="source-card"><div class="count">${fmt(value)}</div><div class="small">${esc(label)}</div></div>`).join('')}
+      </div>
+    </section>
+    <div class="grid2">
+      <section class="panel">
+        <div class="panel-head"><div><h2>Documented brands by category</h2><p>Deterministic topic classification for triage, not an AI judgment of commercial fit.</p></div></div>
+        <div class="bars">${Object.entries(categories).sort((a, b) => b[1] - a[1]).map(([key, value]) => `
+          <div class="bar-row"><span>${esc(pretty(key))}</span><div class="bar-track"><div class="bar-fill" style="width:${value / maxCategory * 100}%"></div></div><b>${fmt(value)}</b></div>
+        `).join('')}</div>
+      </section>
+      <section class="panel">
+        <div class="panel-head"><div><h2>Acquisition audit</h2><p>Failed and gated sources remain visible in the denominator.</p></div></div>
+        <div class="source-cards">
+          ${[
+            ['Complete sources', m.sources_complete],
+            ['Failed sources', m.sources_failed],
+            ['Gated / skipped', m.sources_skipped_gated],
+            ['Pages captured', m.pages_captured],
+            ['Conference records', m.raw_conference_records],
+            ['Clean agency links', m.clean_relationships],
+          ].map(([label, value]) => `<div class="source-card"><div class="count">${fmt(value)}</div><div class="small">${esc(label)}</div></div>`).join('')}
+        </div>
+      </section>
+    </div>
+    <section class="panel">
+      <div class="panel-head"><div><h2>Highest-confidence extracted properties</h2><p>Ordered by evidence quality and volume. This is not the final Leatherback opportunity ranking.</p></div><button class="button" data-jump="brands">Open all</button></div>
+      <div class="table-wrap" style="max-height:560px">${brandTable(strongest)}</div>
+    </section>
+    <p class="footer-note">Generated ${date(m.generated_at)}. ${fmt(failed.length)} registered sources did not complete; their URLs and errors are retained under Sources & failures.</p>`;
+}
+
+function renderAgencies() {
+  const query = state.queries.agencies.trim().toLowerCase();
+  const matched = DATA.agencies.filter((item) => !query || [
+    item.canonical_name, item.region, item.country, item.description, item.website,
+  ].join(' ').toLowerCase().includes(query));
+  const { rows, total } = cap(matched);
+  $('#route-agencies').innerHTML = `
+    ${intro('Rights representation', 'Licensing agencies', 'The agency layer is deduplicated from registered portfolios and discovered agency listings. Click a row to inspect its extracted portfolio.')}
+    <div class="toolbar"><input class="input" id="agency-q" value="${esc(state.queries.agencies)}" placeholder="Search agency, region or focus">${resultCount(total, rows.length)}</div>
+    <section class="panel"><div class="table-wrap">${agencyTable(rows)}</div></section>`;
+}
+
+function renderBrands() {
+  const categories = ['all', ...new Set(DATA.brands.map((item) => item.category || 'other'))].sort();
+  const qualities = ['all', 'high_confidence', 'documented'];
+  const query = state.queries.brands.trim().toLowerCase();
+  const agencyNamesByBrand = DATA.agencyNamesByBrand;
+  const matched = DATA.brands.filter((item) => (
+    (state.category === 'all' || item.category === state.category)
+    && (state.quality === 'all' || item.quality_status === state.quality)
+    && (!query || [
+      item.canonical_name, item.category, item.website,
+      ...(agencyNamesByBrand.get(Number(item.id)) || []),
+    ].join(' ').toLowerCase().includes(query))
+  )).sort(qualityOrder);
+  const { rows, total } = cap(matched);
+  $('#route-brands').innerHTML = `
+    ${intro('Clean discovery corpus', 'Brands & properties', 'These records survived deterministic quality filtering and have stored agency or source evidence. Legal availability of travel rights still requires direct verification.')}
+    <div class="toolbar">
+      <input class="input" id="brand-q" value="${esc(state.queries.brands)}" placeholder="Search brand or representing agency">
+      <select class="select" id="brand-cat">${categories.map((value) => `<option value="${esc(value)}" ${value === state.category ? 'selected' : ''}>${esc(pretty(value))}</option>`).join('')}</select>
+      <select class="select" id="brand-quality">${qualities.map((value) => `<option value="${esc(value)}" ${value === state.quality ? 'selected' : ''}>${esc(pretty(value))}</option>`).join('')}</select>
+      ${resultCount(total, rows.length)}
+    </div>
+    <section class="panel"><div class="table-wrap">${brandTable(rows)}</div></section>`;
+}
+
+function firstSourceUrl(item) {
+  return parseList(item.source_urls)[0] || '';
+}
+
+function renderRelationships() {
+  const agencies = ['all', ...new Set(DATA.reps.map((item) => item.agency_name).filter(Boolean))].sort();
+  const relationships = ['all', ...new Set(DATA.reps.map((item) => item.relationship_status).filter(Boolean))].sort();
+  const query = state.queries.relationships.trim().toLowerCase();
+  const matched = DATA.reps.filter((item) => (
+    (state.agency === 'all' || item.agency_name === state.agency)
+    && (state.relationship === 'all' || item.relationship_status === state.relationship)
+    && (!query || [item.agency_name, item.brand_name, item.category, item.relationship_status].join(' ').toLowerCase().includes(query))
+  ));
+  const { rows, total } = cap(matched);
+  $('#route-relationships').innerHTML = `
+    ${intro('Representation evidence', 'Agency–brand links', 'Each row maps an extracted property to the agency and evidence source that produced it. Portfolio presence is not treated as proof that global travel rights are available.')}
+    <div class="toolbar">
+      <input class="input" id="rel-q" value="${esc(state.queries.relationships)}" placeholder="Search agency or brand">
+      <select class="select" id="rel-agency">${agencies.map((value) => `<option value="${esc(value)}" ${value === state.agency ? 'selected' : ''}>${esc(value)}</option>`).join('')}</select>
+      <select class="select" id="rel-type">${relationships.map((value) => `<option value="${esc(value)}" ${value === state.relationship ? 'selected' : ''}>${esc(pretty(value))}</option>`).join('')}</select>
+      ${resultCount(total, rows.length)}
+    </div>
+    <section class="panel"><div class="table-wrap"><table><thead><tr>
+      <th>Agency</th><th>Brand / property</th><th>Category</th><th>Evidence type</th><th>Quality</th><th>Evidence</th>
+    </tr></thead><tbody>${rows.map((item) => {
+      const source = firstSourceUrl(item);
