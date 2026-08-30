@@ -1,0 +1,48 @@
+ return out
+def links(page,seed):
+ soup=BeautifulSoup(page['html'] or '','lxml'); scores={}
+ for a in soup.select('a[href]')[:10000]:
+  href=a.get('href',''); text=clean(a.get_text(' ',strip=True)); signal=href+' '+text
+  if not href or EXCL.search(signal):continue
+  u=url(href,page['final'])
+  if not u or not same(seed,u) or (not SIG.search(signal) and not re.search(r'(?i)(page=|/page/|pagination|next)',signal)):continue
+  score=1+4*bool(re.search(r'(?i)(brand|client|portfolio|property|roster)',signal))+2*bool(re.search(r'(?i)licen[cs]',signal));scores[u]=max(scores.get(u,0),score)
+ return [x for x,_ in sorted(scores.items(),key=lambda z:(-z[1],z[0]))[:20]]
+def insert_page(c,s,p):
+ digest=hashlib.sha256((p['html'] or '').encode('utf-8','ignore')).hexdigest(); raw=''
+ if p['html']:
+  folder=RAW/re.sub(r'[^a-z0-9]+','-',s['name'].casefold()).strip('-')[:70]; folder.mkdir(parents=True,exist_ok=True); path=folder/(digest+'.html.gz'); gzip.open(path,'wt',encoding='utf-8').write(p['html']); raw=str(path.relative_to(ROOT))
+ text=clean(BeautifulSoup(p['html'] or '','lxml').get_text(' ',strip=True))[:3000]
+ return c.execute('INSERT INTO pages(source_id,requested_url,final_url,title,http_status,content_type,fetch_method,fetched_at,elapsed_ms,content_hash,text_excerpt,raw_path,error) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',(s['id'],p['requested'],p['final'],p['title'],p['status'],p['ctype'],p['method'],NOW,p['ms'],digest,text,raw,p['error'])).lastrowid
+def promote(c,s,pid,e,source_url,agency_id):
+ raw=c.execute('INSERT INTO raw_extractions(source_id,page_id,raw_name,normalized_name,entity_type,linked_url,parent_name,relationship_label,extraction_method,confidence,context,promoted,observed_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',(s['id'],pid,e['name'],norm(e['name']),e['type'],e['link'],e['parent'],e['relationship'],e['method'],e['confidence'],e['context'],0,NOW)).lastrowid
+ threshold=.58 if s['source_type'].startswith('conference') else .62
+ if e['confidence']<threshold:return 0
+ if e['type']=='licensing_agency':
+  cid=company(c,e['name'],'licensing_agency',s,e['link'],e['context']);evidence(c,s,pid,'company',cid,'industry_agent_listing',e,source_url)
+ elif s['source_type']=='agency_portfolio' or e['parent']:
+  bid=brand(c,e['name'],s,e['link'],e['context']);evidence(c,s,pid,'brand',bid,'agency_portfolio_or_client_listing',e,source_url); aid=agency_id or company(c,e['parent'],'licensing_agency',s,'',e['context'])
+  c.execute('INSERT OR IGNORE INTO representations(agency_company_id,brand_id,source_id,page_id,source_url,brand_url,territory,relationship_status,extraction_method,confidence,context,observed_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',(aid,bid,s['id'],pid,source_url,e['link'],s.get('region',''),e['relationship'] or 'portfolio_presence_unverified',e['method'],e['confidence'],e['context'],NOW))
+ elif s['source_type'].startswith('conference'):
+  cid=company(c,e['name'],'conference_exhibitor_or_licensor',s,e['link'],e['context']);c.execute('INSERT INTO conference_presence(source_id,page_id,conference_name,edition_year,entity_type,company_id,source_url,linked_url,extraction_method,confidence,context,observed_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',(s['id'],pid,s['name'],2026,'company',cid,source_url,e['link'],e['method'],e['confidence'],e['context'],NOW));evidence(c,s,pid,'company',cid,'conference_directory_presence',e,source_url)
+ else:
+  cid=company(c,e['name'],'licensing_market_participant',s,e['link'],e['context']);evidence(c,s,pid,'company',cid,'industry_directory_presence',e,source_url)
+ c.execute('UPDATE raw_extractions SET promoted=1 WHERE id=?',(raw,));return 1
+def process(c,s,p,agency_id):
+ pid=insert_page(c,s,p)
+ if not p['html'] or p['status']>=400 or p['status']==0:return 0,0,[]
+ ex=extract_lg(p) if s['parser']=='licenseglobal_agents' or 'top-global-licensing-agents' in p['final'] else extract_generic(p); promoted=0
+ for e in ex:
+  try:promoted+=promote(c,s,pid,e,p['final'],agency_id)
+  except:pass
+ return len(ex),promoted,links(p,s['crawl_url'] or s['base_url'])
+async def crawl(c,s,sem):
+ start=time.monotonic();c.execute("UPDATE sources SET status='running',started_at=? WHERE id=?",(NOW,s['id']));c.commit()
+ if s['access_mode'] in ('login_export','manual_only'):
+  c.execute("UPDATE sources SET status='skipped_gated',finished_at=?,error=? WHERE id=?",(NOW,'Authorized export/login required; not bypassed.',s['id']));c.commit();return {'source':s['name'],'status':'skipped_gated'}
+ session=requests.Session();session.headers.update({'User-Agent':UA,'Accept-Language':'en-GB,en;q=.8'}); agency_id=None
+ if s['source_type']=='agency_portfolio':
+  try:agency_id=company(c,s.get('agency_name') or s['name'],'licensing_agency',s,s['base_url'],s.get('focus',''))
+  except:pass
+ maxp=max(1,min(int(s['config'].get('max_pages') or (6 if s['source_type']=='agency_portfolio' else 3)),12)); q=deque([url(s['crawl_url'])]); queued=set(q);seen=set();raw=prom=0;errs=[];statuses=[];final=s['crawl_url'];rb='unknown';bused=False
+ while q and len(seen)<maxp:
