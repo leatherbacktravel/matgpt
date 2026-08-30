@@ -1,0 +1,116 @@
+      <div class="detail-item"><b>Agencies found</b>${fmt(item.agency_count)}</div>
+      <div class="detail-item"><b>First-party evidence</b>${fmt(item.first_party_evidence_count)}</div>
+      <div class="detail-item"><b>Source pages</b>${fmt(item.source_count)}</div>
+    </div>
+    ${item.website ? `<p><a class="button primary" href="${esc(item.website)}" target="_blank" rel="noopener">Open portfolio page</a></p>` : ''}
+    <h2>Agency evidence</h2><div style="margin-top:12px">${reps.length ? reps.map((rep) => {
+      const source = firstSourceUrl(rep);
+      return `<div class="detail-item" style="margin-bottom:8px"><b>${esc(rep.agency_name)}</b><div class="small">${esc(pretty(rep.relationship_status))} · ${pct(rep.quality_score)} evidence quality</div>${source ? `<a class="link small" target="_blank" rel="noopener" href="${esc(source)}">Open source evidence</a>` : ''}</div>`;
+    }).join('') : '<div class="small">No clean agency relationship stored.</div>'}</div>
+    <div class="notice"><b>Triage only:</b> The database contains a deterministic opportunity score for queue ordering, but no final commercial or AI judgment has been made.</div>`);
+}
+
+function agencyDetails(id) {
+  const item = DATA.agenciesById.get(Number(id));
+  if (!item) return;
+  const reps = DATA.repsByAgency.get(Number(id)) || [];
+  openDrawer(`
+    <button class="drawer-close" data-close>×</button><div class="eyebrow">Licensing agency</div>
+    <h1 style="font-size:29px">${esc(item.canonical_name)}</h1><p class="lede">${esc(item.description || 'No focus description stored.')}</p>
+    <div class="detail-grid">
+      <div class="detail-item"><b>Region</b>${esc(item.region || '—')}</div>
+      <div class="detail-item"><b>Brands found</b>${fmt(item.represented_brand_count)}</div>
+      <div class="detail-item"><b>First-party portfolio records</b>${fmt(item.first_party_brand_count)}</div>
+      <div class="detail-item"><b>Agent-list records</b>${fmt(item.agent_list_brand_count)}</div>
+    </div>
+    ${item.website ? `<p><a class="button primary" href="${esc(item.website)}" target="_blank" rel="noopener">Open agency site</a></p>` : ''}
+    <h2>Extracted clean portfolio</h2><div style="margin-top:12px">${reps.slice(0, 150).map((rep) => `<div class="detail-item" data-brand-id="${rep.brand_id}" style="margin-bottom:8px;cursor:pointer"><b>${esc(rep.brand_name)}</b><div class="small">${esc(pretty(rep.category))} · ${pct(rep.quality_score)}</div></div>`).join('') || '<div class="small">No clean portfolio records.</div>'}</div>
+    ${reps.length > 150 ? `<p class="small">First 150 of ${fmt(reps.length)} relationships shown.</p>` : ''}`);
+}
+
+function debounce(handler, delay = 150) {
+  let timer;
+  return (event) => {
+    clearTimeout(timer);
+    timer = setTimeout(() => handler(event), delay);
+  };
+}
+
+function bindRoute() {
+  $$('[data-brand-id]').forEach((node) => { node.onclick = () => brandDetails(node.dataset.brandId); });
+  $$('[data-agency-id]').forEach((node) => { node.onclick = () => agencyDetails(node.dataset.agencyId); });
+  $$('[data-jump]').forEach((node) => { node.onclick = () => go(node.dataset.jump); });
+  $$('[data-close]').forEach((node) => { node.onclick = closeDrawer; });
+
+  const bindQuery = (id, key, renderer) => {
+    const input = $(`#${id}`);
+    if (input) input.oninput = debounce((event) => {
+      state.queries[key] = event.target.value;
+      renderer();
+      const next = $(`#${id}`);
+      if (next) { next.focus(); next.setSelectionRange(next.value.length, next.value.length); }
+    });
+  };
+  bindQuery('agency-q', 'agencies', renderAgencies);
+  bindQuery('brand-q', 'brands', renderBrands);
+  bindQuery('rel-q', 'relationships', renderRelationships);
+  bindQuery('source-q', 'sources', renderSources);
+
+  const cat = $('#brand-cat'); if (cat) cat.onchange = (event) => { state.category = event.target.value; renderBrands(); };
+  const quality = $('#brand-quality'); if (quality) quality.onchange = (event) => { state.quality = event.target.value; renderBrands(); };
+  const agency = $('#rel-agency'); if (agency) agency.onchange = (event) => { state.agency = event.target.value; renderRelationships(); };
+  const relation = $('#rel-type'); if (relation) relation.onchange = (event) => { state.relationship = event.target.value; renderRelationships(); };
+  const sourceStatus = $('#source-status'); if (sourceStatus) sourceStatus.onchange = (event) => { state.sourceStatus = event.target.value; renderSources(); };
+}
+
+document.addEventListener('click', (event) => {
+  const button = event.target.closest('[data-route]');
+  if (button) go(button.dataset.route);
+});
+$('#drawer-bg').addEventListener('click', (event) => { if (event.target === $('#drawer-bg')) closeDrawer(); });
+window.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeDrawer(); });
+
+async function fetchJson(name) {
+  const response = await fetch(`database-v3/${name}.json?v=${Date.now()}`, { cache: 'no-store' });
+  if (!response.ok) throw new Error(`${name}.json returned HTTP ${response.status}`);
+  return response.json();
+}
+
+async function load() {
+  try {
+    const [meta, agencies, brands, reps, sources] = await Promise.all([
+      fetchJson('metadata'), fetchJson('agencies'), fetchJson('brands'), fetchJson('representations'), fetchJson('sources'),
+    ]);
+    Object.assign(DATA, { meta, agencies, brands, reps, sources });
+    DATA.brandsById = new Map(brands.map((item) => [Number(item.id), item]));
+    DATA.agenciesById = new Map(agencies.map((item) => [Number(item.id), item]));
+    DATA.repsByBrand = new Map(); DATA.repsByAgency = new Map(); DATA.agencyNamesByBrand = new Map();
+    reps.forEach((item) => {
+      const brandId = Number(item.brand_id); const agencyId = Number(item.agency_id);
+      if (!DATA.repsByBrand.has(brandId)) DATA.repsByBrand.set(brandId, []);
+      if (!DATA.repsByAgency.has(agencyId)) DATA.repsByAgency.set(agencyId, []);
+      if (!DATA.agencyNamesByBrand.has(brandId)) DATA.agencyNamesByBrand.set(brandId, []);
+      DATA.repsByBrand.get(brandId).push(item);
+      DATA.repsByAgency.get(agencyId).push(item);
+      DATA.agencyNamesByBrand.get(brandId).push(item.agency_name);
+    });
+
+    $('#loading').hidden = true;
+    $('#routes').hidden = false;
+    $('#routes').innerHTML = routes.map(([key]) => `<section class="route" id="route-${key}"></section>`).join('');
+    $('#live-dot').classList.add('ok');
+    $('#live-label').textContent = `Clean database generated ${date(meta.generated_at)}`;
+    state.route = (location.hash || '#overview').slice(1);
+    go(state.route);
+  } catch (error) {
+    $('#loading').hidden = true;
+    $('#error').hidden = false;
+    $('#error').className = 'error-box';
+    $('#error').innerHTML = `<h2>Database unavailable</h2><p>${esc(error.message)}</p><p class="small">The application will not substitute the withdrawn Top 50 or the old seed list.</p>`;
+    $('#live-dot').classList.add('bad');
+    $('#live-label').textContent = 'Database load failed';
+  }
+}
+
+renderNav();
+load();
