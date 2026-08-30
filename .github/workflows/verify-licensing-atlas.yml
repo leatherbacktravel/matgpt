@@ -1,0 +1,38 @@
+name: Verify Licensing Atlas
+
+on:
+  push:
+    branches:
+      - gh-pages
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out site
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install browser test dependency
+        run: python -m pip install --disable-pip-version-check selenium==4.35.0
+
+      - name: Run live browser verification
+        run: python .github/verify_pages.py
+
+      - name: Upload verification screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: licensing-atlas-verification
+          path: /tmp/licensing-atlas-verification.png
+          if-no-files-found: ignore
+          retention-days: 7
