@@ -1,0 +1,28 @@
+{
+  "run_id": "20260830T135656Z",
+  "started_at": "2026-08-30T13:56:56+00:00",
+  "completed_at": "2026-08-30T13:59:58+00:00",
+  "methodology": "Public-web directory discovery plus respectful crawl of organisation websites and machine extraction of portfolio relationships.",
+  "verification_note": "Rows marked machine_extracted_unverified require human confirmation before outreach.",
+  "scope_note": "This is a broad public-web index, not a mathematical guarantee of every licensing business worldwide. Login-only, paywalled, blocked and non-indexed organisations may be absent.",
+  "counts": {
+    "licensing_agencies": 80,
+    "licensor_brand_owners": 23,
+    "brands_and_properties": 6062,
+    "conference_exhibitors_and_directory_members": 690,
+    "all_organisations": 6855,
+    "agency_client_relationships": 6063,
+    "sources_registered": 157,
+    "sources_fetched": 120,
+    "pages_captured": 470,
+    "conference_appearances": 772,
+    "errors": 25
+  },
+  "organisation_type_counts": {
+    "brand_or_property": 6062,
+    "conference_exhibitor": 672,
+    "directory_member": 18,
+    "licensing_agency": 80,
+    "licensor_brand_owner": 23
+  }
+}

@@ -1,0 +1,152 @@
+[
+  {
+    "stage": "fetch",
+    "target": "https://licensinghorizons.com/",
+    "error": "HTTPSConnectionPool(host='licensinghorizons.com', port=443): Max retries exceeded with url: / (Caused by NameResolutionError(\"HTTPSConnection(host='licensinghorizons.com', port=443): Failed to resolve 'licensinghorizons.com' ([Errno -5] No address associated with hostname)\"))",
+    "at": "2026-08-30T13:57:47+00:00"
+  },
+  {
+    "stage": "fetch",
+    "target": "https://www.animationintl.com/",
+    "error": "HTTPSConnectionPool(host='www.animationintl.com', port=443): Max retries exceeded with url: / (Caused by NameResolutionError(\"HTTPSConnection(host='www.animationintl.com', port=443): Failed to resolve 'www.animationintl.com' ([Errno -2] Name or service not known)\"))",
+    "at": "2026-08-30T13:58:02+00:00"
+  },
+  {
+    "stage": "fetch",
+    "target": "https://www.alfilobrands.com/",
+    "error": "HTTPSConnectionPool(host='www.alfilobrands.com', port=443): Max retries exceeded with url: / (Caused by NameResolutionError(\"HTTPSConnection(host='www.alfilobrands.com', port=443): Failed to resolve 'www.alfilobrands.com' ([Errno -2] Name or service not known)\"))",
+    "at": "2026-08-30T13:58:02+00:00"
+  },
+  {
+    "stage": "fetch",
+    "target": "https://blackmint.com.au/",
+    "error": "HTTPSConnectionPool(host='blackmint.com.au', port=443): Max retries exceeded with url: / (Caused by NameResolutionError(\"HTTPSConnection(host='blackmint.com.au', port=443): Failed to resolve 'blackmint.com.au' ([Errno -2] Name or service not known)\"))",
+    "at": "2026-08-30T13:58:02+00:00"
+  },
+  {
+    "stage": "fetch",
+    "target": "https://biplano.com/",
+    "error": "HTTPSConnectionPool(host='biplano.com', port=443): Max retries exceeded with url: / (Caused by SSLError(SSLCertVerificationError(1, '[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1010)')))",
+    "at": "2026-08-30T13:58:04+00:00"
+  },
+  {
+    "stage": "fetch",
+    "target": "https://bulldog-licensing.com/",
+    "error": "HTTPSConnectionPool(host='bulldog-licensing.com', port=443): Max retries exceeded with url: / (Caused by SSLError(SSLCertVerificationError(1, \"[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: Hostname mismatch, certificate is not valid for 'bulldog-licensing.com'. (_ssl.c:1010)\")))",
+    "at": "2026-08-30T13:58:13+00:00"
+  },
+  {
+    "stage": "fetch",
+    "target": "https://broadstreetlicensing.com/",
+    "error": "HTTPSConnectionPool(host='broadstreetlicensing.com', port=443): Max retries exceeded with url: / (Caused by NameResolutionError(\"HTTPSConnection(host='broadstreetlicensing.com', port=443): Failed to resolve 'broadstreetlicensing.com' ([Errno -3] Temporary failure in name resolution)\"))",
+    "at": "2026-08-30T13:58:14+00:00"
+  },
+  {
+    "stage": "fetch",
+    "target": "https://www.characterlicensing.co.za/",
+    "error": "HTTPSConnectionPool(host='www.characterlicensing.co.za', port=443): Max retries exceeded with url: / (Caused by NameResolutionError(\"HTTPSConnection(host='www.characterlicensing.co.za', port=443): Failed to resolve 'www.characterlicensing.co.za' ([Errno -2] Name or service not known)\"))",
+    "at": "2026-08-30T13:58:14+00:00"
+  },
+  {
+    "stage": "fetch",
+    "target": "https://clicklicensingasia.com/",
+    "error": "HTTPSConnectionPool(host='clicklicensingasia.com', port=443): Max retries exceeded with url: / (Caused by NewConnectionError(\"HTTPSConnection(host='clicklicensingasia.com', port=443): Failed to establish a new connection: [Errno 111] Connection refused\"))",
+    "at": "2026-08-30T13:58:16+00:00"
+  },
+  {
+    "stage": "fetch",
+    "target": "https://elocho.es/",
+    "error": "HTTPSConnectionPool(host='elocho.es', port=443): Max retries exceeded with url: / (Caused by SSLError(SSLError(1, '[SSL: TLSV1_ALERT_INTERNAL_ERROR] tlsv1 alert internal error (_ssl.c:1010)')))",
+    "at": "2026-08-30T13:58:19+00:00"
+  },
+  {
+    "stage": "fetch",
+    "target": "https://epicrights.com/",
+    "error": "HTTPSConnectionPool(host='epicrights.com', port=443): Max retries exceeded with url: / (Caused by SSLError(SSLCertVerificationError(1, '[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1010)')))",
+    "at": "2026-08-30T13:58:21+00:00"
+  },
+  {
+    "stage": "fetch",
+    "target": "https://www.alifish.com/",
+    "error": "HTTPSConnectionPool(host='www.alifish.com', port=443): Max retries exceeded with url: / (Caused by NameResolutionError(\"HTTPSConnection(host='www.alifish.com', port=443): Failed to resolve 'www.alifish.com' ([Errno -3] Temporary failure in name resolution)\"))",
+    "at": "2026-08-30T13:58:37+00:00"
+  },
+  {
+    "stage": "fetch",
+    "target": "https://www.infiniss.com/",
+    "error": "HTTPSConnectionPool(host='www.infiniss.com', port=443): Max retries exceeded with url: / (Caused by NewConnectionError(\"HTTPSConnection(host='www.infiniss.com', port=443): Failed to establish a new connection: [Errno 111] Connection refused\"))",
+    "at": "2026-08-30T13:58:45+00:00"
+  },
+  {
+    "stage": "fetch",
+    "target": "https://kasmanas.com.br/",
+    "error": "HTTPSConnectionPool(host='kasmanas.com.br', port=443): Max retries exceeded with url: / (Caused by NameResolutionError(\"HTTPSConnection(host='kasmanas.com.br', port=443): Failed to resolve 'kasmanas.com.br' ([Errno -2] Name or service not known)\"))",
+    "at": "2026-08-30T13:58:46+00:00"
+  },
+  {
+    "stage": "fetch",
+    "target": "https://licenseworks.co.in/",
+    "error": "HTTPSConnectionPool(host='licenseworks.co.in', port=443): Max retries exceeded with url: / (Caused by NameResolutionError(\"HTTPSConnection(host='licenseworks.co.in', port=443): Failed to resolve 'licenseworks.co.in' ([Errno -2] Name or service not known)\"))",
+    "at": "2026-08-30T13:58:49+00:00"
+  },
+  {
+    "stage": "robots",
+    "target": "https://www.lukinternacional.com/",
+    "error": "Disallowed by robots.txt",
+    "at": "2026-08-30T13:58:54+00:00"
+  },
+  {
+    "stage": "fetch",
+    "target": "https://pinkkeylicensing.com/",
+    "error": "HTTPSConnectionPool(host='pinkkeylicensing.com', port=443): Max retries exceeded with url: / (Caused by NameResolutionError(\"HTTPSConnection(host='pinkkeylicensing.com', port=443): Failed to resolve 'pinkkeylicensing.com' ([Errno -2] Name or service not known)\"))",
+    "at": "2026-08-30T13:59:00+00:00"
+  },
+  {
+    "stage": "fetch",
+    "target": "https://www.perryscope.com/",
+    "error": "HTTPSConnectionPool(host='www.perryscope.com', port=443): Max retries exceeded with url: / (Caused by NameResolutionError(\"HTTPSConnection(host='www.perryscope.com', port=443): Failed to resolve 'www.perryscope.com' ([Errno -2] Name or service not known)\"))",
+    "at": "2026-08-30T13:59:00+00:00"
+  },
+  {
+    "stage": "fetch",
+    "target": "https://pluslicens.se/",
+    "error": "HTTPSConnectionPool(host='pluslicens.se', port=443): Max retries exceeded with url: / (Caused by SSLError(SSLCertVerificationError(1, \"[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: Hostname mismatch, certificate is not valid for 'pluslicens.se'. (_ssl.c:1010)\")))",
+    "at": "2026-08-30T13:59:01+00:00"
+  },
+  {
+    "stage": "fetch",
+    "target": "https://www.superrtllicensing.com/",
+    "error": "HTTPSConnectionPool(host='www.superrtllicensing.com', port=443): Max retries exceeded with url: / (Caused by NameResolutionError(\"HTTPSConnection(host='www.superrtllicensing.com', port=443): Failed to resolve 'www.superrtllicensing.com' ([Errno -2] Name or service not known)\"))",
+    "at": "2026-08-30T13:59:17+00:00"
+  },
+  {
+    "stage": "fetch",
+    "target": "https://thepoint1888.com/",
+    "error": "HTTPSConnectionPool(host='thepoint1888.com', port=443): Max retries exceeded with url: / (Caused by SSLError(SSLCertVerificationError(1, \"[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: Hostname mismatch, certificate is not valid for 'thepoint1888.com'. (_ssl.c:1010)\")))",
+    "at": "2026-08-30T13:59:23+00:00"
+  },
+  {
+    "stage": "fetch",
+    "target": "https://tycoon.com.mx/",
+    "error": "HTTPSConnectionPool(host='tycoon.com.mx', port=443): Max retries exceeded with url: / (Caused by NameResolutionError(\"HTTPSConnection(host='tycoon.com.mx', port=443): Failed to resolve 'tycoon.com.mx' ([Errno -5] No address associated with hostname)\"))",
+    "at": "2026-08-30T13:59:25+00:00"
+  },
+  {
+    "stage": "fetch",
+    "target": "https://metrostar.co.uk/",
+    "error": "HTTPSConnectionPool(host='metrostar.co.uk', port=443): Max retries exceeded with url: / (Caused by NameResolutionError(\"HTTPSConnection(host='metrostar.co.uk', port=443): Failed to resolve 'metrostar.co.uk' ([Errno -3] Temporary failure in name resolution)\"))",
+    "at": "2026-08-30T13:59:30+00:00"
+  },
+  {
+    "stage": "fetch",
+    "target": "https://xilam.com/",
+    "error": "HTTPSConnectionPool(host='xilam.com', port=443): Max retries exceeded with url: / (Caused by SSLError(SSLCertVerificationError(1, '[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1010)')))",
+    "at": "2026-08-30T13:59:31+00:00"
+  },
+  {
+    "stage": "fetch",
+    "target": "https://www.verticallicensing.com.br/post/vertical-licensing-%C3%A9-nomeada-ag%C3%AAncia-oficial-de-moomin-no-brasil",
+    "error": "Response ended prematurely",
+    "at": "2026-08-30T13:59:38+00:00"
+  }
+]
