@@ -1,0 +1,48 @@
+#!/usr/bin/env python3
+"""Populate an auditable licensing-market database from public source pages."""
+from __future__ import annotations
+import argparse, asyncio, csv, gzip, hashlib, html, json, re, sqlite3, time
+import urllib.parse, urllib.robotparser
+from collections import deque
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+import requests
+from bs4 import BeautifulSoup
+from playwright.async_api import async_playwright
+
+ROOT=Path(__file__).resolve().parents[1]; REG=ROOT/'crawler/source_registry.csv'; OUT=ROOT/'data'; RAW=OUT/'raw'; DB=OUT/'licensing_database.sqlite'
+UA='LeatherbackLicensingAtlas/1.0 (+public evidence research; matthew@leatherbacktravel.com)'
+NOW=datetime.now(timezone.utc).replace(microsecond=0).isoformat(); TIMEOUT=25
+GENERIC={x.strip() for x in '''home,about,about us,contact,contact us,privacy,privacy policy,terms,careers,news,blog,services,portfolio,brands,brand,clients,client,properties,property,licensing,license,licence,learn more,read more,view more,more,discover,explore,our work,partners,partner,shop,products,menu,search,close,next,previous,back,all,see all,view all,follow us,instagram,facebook,linkedin,youtube,tiktok,twitter,copyright,cookies,cookie settings,sign in,login,register,submit,download,get in touch,case studies,what we do,who we are,exhibitor list,brand directory'''.split(',')}
+SIG=re.compile(r'(?i)(brand|client|portfolio|property|properties|licen[cs]|roster|representation|principal|partner|our[-_ /]?work|catalog|exhibitor|member|agency)')
+NOISE=re.compile(r'(?i)(privacy|cookie|terms|copyright|newsletter|subscribe|career|press release|latest news|read more|learn more|view more|load more|follow us|instagram|facebook|linkedin|youtube|tiktok|sign in|log in|register|search|menu|skip to)')
+EXCL=re.compile(r'(?i)(privacy|terms|cookie|contact|career|job|news|blog|press|login|account|cart|shop|product|mailto:|tel:|javascript:|#)')
+CATS={
+'nature_wildlife':['wildlife','nature','bird','botanic','garden','ocean','marine','forest','conservation','zoo','aquarium'],
+'heritage_history':['museum','heritage','history','historical','trust','archive','archaeology','castle','royal','foundation'],
+'science_space':['science','space','astronomy','nasa','observatory','planetarium','geographic','exploration','discovery'],
+'art_design':['art','artist','gallery','design','architecture','photography','photo','fashion','decor'],
+'food_drink':['food','chef','kitchen','wine','beer','coffee','tea','chocolate','restaurant','culinary'],
+'outdoor_sport':['outdoor','adventure','sport','golf','tennis','cycling','hiking','climb','fitness','football','rugby','cricket'],
+'transport_automotive':['motor','auto','car','motorcycle','aviation','airline','rail','train','maritime','sailing','yacht'],
+'media_publishing':['magazine','media','publishing','book','television','radio','newspaper','journal'],
+'education':['university','college','school','education','learning'],
+'entertainment_character':['animation','anime','character','cartoon','toys','kids','children','film','movie','gaming','game']}
+TRAVEL={'nature_wildlife':91,'heritage_history':89,'science_space':88,'art_design':82,'food_drink':80,'outdoor_sport':78,'transport_automotive':77,'media_publishing':72,'education':70,'entertainment_character':42,'other':58}
+
+def clean(v):
+ s=BeautifulSoup(str(v or ''),'html.parser').get_text(' ',strip=True); s=html.unescape(s); s=re.sub(r'[\u00a0\u200b-\u200d\ufeff]',' ',s); return re.sub(r'\s+',' ',s).strip(' |•·—–-:;,/')
+def norm(v): return re.sub(r'\s+',' ',re.sub(r'[^a-z0-9]+',' ',re.sub(r'[®™©]','',html.unescape(str(v or '')).casefold()).replace('&',' and '))).strip()
+def plausible(v):
+ v=clean(v); n=norm(v)
+ return bool(n and n not in GENERIC and 2<=len(v)<=150 and len(v.split())<=14 and sum(c.isalpha() for c in v)>=2 and not NOISE.fullmatch(v) and not re.match(r'(?i)^(https?://|www\.|@)',v) and not (len(v)>80 and re.search(r'[.!?]',v)))
+def url(v,base=''):
+ try:
+  p=urllib.parse.urlsplit(urllib.parse.urljoin(base,v));
+  if p.scheme not in ('http','https'): return ''
+  q=[(k,x) for k,x in urllib.parse.parse_qsl(p.query,keep_blank_values=True) if not k.lower().startswith(('utm_','fbclid','gclid'))]
+  return urllib.parse.urlunsplit((p.scheme.lower(),p.netloc.lower(),p.path or '/',urllib.parse.urlencode(q),''))
+ except: return ''
+def same(a,b):
+ x=(urllib.parse.urlsplit(a).hostname or '').lower().removeprefix('www.'); y=(urllib.parse.urlsplit(b).hostname or '').lower().removeprefix('www.'); return bool(x and y and (x==y or x.endswith('.'+y) or y.endswith('.'+x)))
