@@ -1,0 +1,151 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+import argparse, csv, html, json, re, shutil, sqlite3, unicodedata, urllib.parse
+from collections import defaultdict
+from datetime import datetime, timezone
+from pathlib import Path
+
+NOW = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+COUNTRY_NAMES = {
+    'afghanistan','aland islands','albania','algeria','american samoa','andorra','angola','anguilla','antarctica',
+    'antigua and barbuda','argentina','armenia','aruba','australia','austria','azerbaijan','bahamas','bahrain',
+    'bangladesh','barbados','belarus','belgium','belize','benin','bermuda','bhutan','bolivia','bonaire sint eustatius and saba',
+    'bosnia and herzegovina','botswana','bouvet island','brazil','british indian ocean territory','brunei','bulgaria',
+    'burkina faso','burundi','cabo verde','cambodia','cameroon','canada','cape verde','cayman islands','central african republic',
+    'chad','chile','china','christmas island','cocos islands','colombia','comoros','congo','cook islands','costa rica',
+    'cote d ivoire','croatia','cuba','curacao','cyprus','czech republic','czechia','democratic republic of the congo',
+    'denmark','djibouti','dominica','dominican republic','ecuador','egypt','el salvador','equatorial guinea','eritrea',
+    'estonia','eswatini','ethiopia','falkland islands','faroe islands','fiji','finland','france','french guiana',
+    'french polynesia','french southern territories','gabon','gambia','georgia','germany','ghana','gibraltar','greece',
+    'greenland','grenada','guadeloupe','guam','guatemala','guernsey','guinea','guinea bissau','guyana','haiti',
+    'heard island and mcdonald islands','holy see','honduras','hong kong','hungary','iceland','india','indonesia','iran',
+    'iraq','ireland','isle of man','israel','italy','jamaica','japan','jersey','jordan','kazakhstan','kenya','kiribati',
+    'kosovo','kuwait','kyrgyzstan','laos','latvia','lebanon','lesotho','liberia','libya','liechtenstein','lithuania',
+    'luxembourg','macao','macau','madagascar','malawi','malaysia','maldives','mali','malta','marshall islands','martinique',
+    'mauritania','mauritius','mayotte','mexico','micronesia','moldova','monaco','mongolia','montenegro','montserrat',
+    'morocco','mozambique','myanmar','namibia','nauru','nepal','netherlands','new caledonia','new zealand','nicaragua',
+    'niger','nigeria','niue','norfolk island','north korea','north macedonia','northern mariana islands','norway','oman',
+    'pakistan','palau','palestine','panama','papua new guinea','paraguay','peru','philippines','pitcairn','poland','portugal',
+    'puerto rico','qatar','reunion','romania','russia','rwanda','saint barthelemy','saint helena ascension and tristan da cunha',
+    'saint kitts and nevis','saint lucia','saint martin','saint pierre and miquelon','saint vincent and the grenadines',
+    'samoa','san marino','sao tome and principe','saudi arabia','senegal','serbia','seychelles','sierra leone','singapore',
+    'sint maarten','slovakia','slovenia','solomon islands','somalia','south africa','south georgia and the south sandwich islands',
+    'south korea','south sudan','spain','sri lanka','sudan','suriname','svalbard and jan mayen','sweden','switzerland',
+    'syria','taiwan','tajikistan','tanzania','thailand','timor leste','togo','tokelau','tonga','trinidad and tobago',
+    'tunisia','turkey','turkmenistan','turks and caicos islands','tuvalu','uganda','ukraine','united arab emirates',
+    'united kingdom','united states','united states minor outlying islands','uruguay','uzbekistan','vanuatu','vatican city',
+    'venezuela','vietnam','virgin islands british','virgin islands us','wallis and futuna','western sahara','yemen','zambia','zimbabwe'
+}
+
+GENERIC_EXACT = {
+    'home','about','about us','our clients','clients','client list','our brands','brands','brand','portfolio','our portfolio',
+    'projects','our projects','work','our work','news','press','contact','contact us','careers','services','what we do',
+    'who we are','licensing','license','licence','products','shop','login','log in','sign in','my account','my orders',
+    'orders','cart','search','menu','privacy policy','terms and conditions','terms of use','cookie policy','cookies',
+    'accessibility','test page','content','content placeholder','news do not use','about placeholder','view all','learn more',
+    'read more','load more','show more','get started','follow us','locations','regions','countries','country','categories',
+    'category','all brands','our partners','partners','partner','case studies','case study','events','event','media','blog',
+    'insights','page','site','pages','collection','our story','team','the team','company','about company','client login',
+    'sitemap','newsroom','press room','resources','our clients licensing','motion pictures','sports media advisory','consulting',
+    'product','cultural','recent','for retailers','view case study','client area','icons and legends','special products licensing'
+}
+GENERIC_SUBSTR = (
+    'placeholder','do not use','flag_','wix','cookie','privacy','terms of','site menu','get started easily','view all your stats',
+    'track everything','visitor analytics','set email notifications','map your visitors','filter your site visits',
+    'functional components','active campaign','remix_lantern','onboarding','my orders','fontfamily','font family','color_',
+    'colour_','favicon','folder: ways to license','license a famous','read more about our work','view our full roster'
+)
+CATEGORY_LABELS = {
+    'food and beverage','food beverage','corporate','institutional','sports and fitness','personalities','icons','fashion',
+    'children','automotive','pop culture','entertainment','gaming','publishing','lifestyle','art','music','sports',
+    'media and entertainment','luxury','tech and appliances and electronics','cool stuff','toys and collectibles and novelties',
+    'bags and travel and leisure','heritage charity non profit','advertising opportunities','events at a glance','video gallery'
+}
+ARTICLE_RE = re.compile(r'(?i)\b(announces?|reveals?|launches?|partners?|collaboration|collection|campaign|press release|becomes an official|hired|promoted|to rep|deals? for|aims to|plans? |cooks up|serves up|sews up|takes on|adds to|grows? )\b')
+BRAND_PATH = re.compile(r'(?i)/brand-licensing\d*/[^/?#]{2,}|/brands?/[^/?#]{2,}|/clients?/[^/?#]{2,}|/properties?/[^/?#]{2,}|/portfolio/[^/?#]{2,}|/licen[cs]es?/[^/?#]{2,}|/roster/[^/?#]{2,}')
+
+AGENCY_ALIASES = {
+    'jewel branding and licensing':'Jewel Branding & Licensing',
+    'jewel branding licensing':'Jewel Branding & Licensing',
+    'wildbrain cplg':'WildBrain CPLG',
+    'licenseworks':'LicenseWorks',
+    'license works':'LicenseWorks',
+    'semk global marketing':'SEMK Global Marketing',
+    'lmca leveraged marketing corporation of america':'LMCA',
+    'joester loria group jlg':'The Joester Loria Group',
+    'the joester loria group':'The Joester Loria Group',
+    'merchantwise group merchantwise and asembl':'Merchantwise',
+    'medialink animation international':'Medialink',
+    'mhs licensing consulting':'MHS Licensing',
+    'maurizio distefano the evolution of licensing':'Maurizio Distefano Licensing',
+    'la panaderia licensing marketing':'La Panaderia Licensing & Marketing',
+    'la panaderia licensing and marketing':'La Panaderia Licensing & Marketing',
+    'viz media consumer products':'VIZ Media',
+    'glam licensing consulting':'Glam Licensing & Consulting',
+    'glam licensing and consulting':'Glam Licensing & Consulting',
+}
+
+CATEGORY_WORDS = {
+    'nature_wildlife':('wildlife','nature','bird','botanic','garden','ocean','marine','forest','conservation','zoo','aquarium','animal'),
+    'heritage_history':('museum','heritage','history','historical','trust','archive','archaeology','castle','royal','foundation','national trust'),
+    'science_space':('science','space','astronomy','nasa','observatory','planetarium','geographic','exploration','discovery','technology'),
+    'art_design':('art','artist','gallery','design','architecture','photography','photo','fashion','decor','interior','textile'),
+    'food_drink':('food','chef','kitchen','wine','beer','coffee','tea','chocolate','restaurant','culinary','cola','pepsi','haribo'),
+    'outdoor_sport':('outdoor','adventure','sport','golf','tennis','cycling','hiking','climb','fitness','football','rugby','cricket','racing','ufc'),
+    'transport_automotive':('motor','auto','car','motorcycle','aviation','airline','rail','train','maritime','sailing','yacht','ford','jeep','ferrari','porsche'),
+    'media_publishing':('magazine','media','publishing','book','television','radio','newspaper','journal','billboard','vogue','esquire'),
+    'education':('university','college','school','education','learning','harvard','yale'),
+    'entertainment_character':('animation','anime','character','cartoon','toys','kids','children','film','movie','gaming','game','bear','cat','dog')
+}
+TRAVEL_FIT={'nature_wildlife':91,'heritage_history':89,'science_space':88,'art_design':82,'food_drink':80,'outdoor_sport':78,'transport_automotive':77,'media_publishing':72,'education':70,'entertainment_character':42,'other':58}
+HINT_MAP={
+    'automotive':'transport_automotive','sports + fitness':'outdoor_sport','sports':'outdoor_sport','food + beverage':'food_drink',
+    'institutional':'heritage_history','art':'art_design','fashion':'art_design','publishing':'media_publishing',
+    'media + entertainment':'media_publishing','entertainment':'entertainment_character','children':'entertainment_character',
+    'gaming':'entertainment_character','pop culture':'entertainment_character','bags + travel + leisure':'other'
+}
+
+def clean_text(v):
+    x=html.unescape(str(v or '')); x=re.sub(r'[®™©℠]','',x); return re.sub(r'\s+',' ',x).strip(' \t\r\n|•·—–-:;,')
+
+def norm(v):
+    x=unicodedata.normalize('NFKD',clean_text(v)).encode('ascii','ignore').decode().casefold().replace('&',' and ')
+    return re.sub(r'\s+',' ',re.sub(r'[^a-z0-9]+',' ',x)).strip()
+
+def clean_image_name(v):
+    x=clean_text(v).replace('_',' ')
+    x=re.sub(r'(?i)^client logos?\s*(?:website\s*)?','',x)
+    x=re.sub(r'(?i)\.(?:png|jpe?g|webp|svg)$','',x)
+    for _ in range(4):
+        old=x
+        x=re.sub(r'(?i)\s*(?:[-–—_:]?\s*(?:logos?|wordmark|brandmark|icon|grid portrait|portrait|primary|secondary|white|black|rgb|cmyk|copy|core|final|transparent))(?:[-–—_ ]*\d+)?\s*$','',x).strip()
+        x=re.sub(r'(?i)\s+\d{2,4}x\d{2,4}(?:\s+v?\d+(?:\.\d+)?)?\s*$','',x).strip()
+        if x==old: break
+    return clean_text(x)
+
+def parse_obj(v):
+    try:
+        x=json.loads(v or '')
+        return x if isinstance(x,dict) else None
+    except Exception:
+        return None
+
+def noise_name(v,obj=None):
+    x=clean_text(v); n=norm(x)
+    if not n or len(x)<2 or len(x)>150 or len(x.split())>14 or sum(ch.isalpha() for ch in x)<2: return True
+    if n in GENERIC_EXACT or n in COUNTRY_NAMES or n in CATEGORY_LABELS: return True
+    if any(t in x.casefold() for t in GENERIC_SUBSTR): return True
+    if re.match(r'(?i)^(flag_|color_|colour_|font_|page_|wix|icon_|btn_|button_|section_|component_)',x): return True
+    if re.match(r'(?i)^[a-z]+_[a-z0-9_]+$',x): return True
+    if re.match(r'(?i)^(https?://|www\.|mailto:|tel:)',x): return True
+    if ARTICLE_RE.search(x) and len(x.split())>=5: return True
+    if re.search(r'(?i)\b(20\d{2}|million|billion|award|finalist|viewership|youtube channels|territories)\b',x) and len(x.split())>=5: return True
+    if re.search(r'[.!?]',x) and len(x.split())>=8: return True
+    if obj:
+        keys=set(obj)
+        if {'code','phoneCode'} <= keys or {'fontFamily','provider'} <= keys or {'reference','value'} <= keys: return True
+        if {'clientSlugs','key','title'} <= keys or 'catalogue_entry_id' in keys: return True
+        if any(k in keys for k in ('pageUriSEO','pageJsonFileName','isHomePage','defaultPage')): return True
+        if {'category','clientName','date','slug','title'} <= keys: return True
+        if 'clientName' in keys and ('year' in keys or 'categories' in keys): return True
