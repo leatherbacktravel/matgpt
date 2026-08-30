@@ -1,0 +1,48 @@
+def rows(path=REG):
+ out=[]
+ for i,r in enumerate(csv.DictReader(open(path,encoding='utf-8-sig')),1):
+  try: cfg=json.loads(r.get('config_json') or '{}')
+  except: cfg={}
+  r.update(id=i,priority=int(float(r.get('priority') or 3)),official=str(r.get('official','')).lower() in ('1','true','yes'),config=cfg); out.append(r)
+ return out
+
+def init():
+ OUT.mkdir(exist_ok=True); RAW.mkdir(exist_ok=True)
+ if DB.exists(): DB.unlink()
+ c=sqlite3.connect(DB); c.row_factory=sqlite3.Row; c.executescript('''
+ PRAGMA journal_mode=WAL; CREATE TABLE metadata(key TEXT PRIMARY KEY,value TEXT);
+ CREATE TABLE sources(id INTEGER PRIMARY KEY,name TEXT,source_type TEXT,agency_name TEXT,region TEXT,country TEXT,focus TEXT,priority INT,official INT,access_mode TEXT,parser TEXT,base_url TEXT,crawl_url TEXT,notes TEXT,status TEXT DEFAULT 'pending',http_status INT,final_url TEXT,robots_status TEXT,pages_fetched INT DEFAULT 0,raw_candidates INT DEFAULT 0,promoted_entities INT DEFAULT 0,started_at TEXT,finished_at TEXT,elapsed_ms INT DEFAULT 0,error TEXT);
+ CREATE TABLE pages(id INTEGER PRIMARY KEY,source_id INT,requested_url TEXT,final_url TEXT,title TEXT,http_status INT,content_type TEXT,fetch_method TEXT,fetched_at TEXT,elapsed_ms INT,content_hash TEXT,text_excerpt TEXT,raw_path TEXT,error TEXT);
+ CREATE TABLE companies(id INTEGER PRIMARY KEY,canonical_name TEXT,normalized_name TEXT,company_type TEXT,website TEXT,region TEXT,country TEXT,description TEXT,first_source_id INT,evidence_count INT DEFAULT 0,first_seen_at TEXT,last_seen_at TEXT,UNIQUE(normalized_name,company_type));
+ CREATE TABLE brands(id INTEGER PRIMARY KEY,canonical_name TEXT,normalized_name TEXT UNIQUE,website TEXT,category TEXT,description TEXT,first_source_id INT,evidence_count INT DEFAULT 0,representation_count INT DEFAULT 0,conference_count INT DEFAULT 0,travel_fit_score REAL DEFAULT 0,licensing_readiness_score REAL DEFAULT 0,preliminary_score REAL DEFAULT 0,score_basis TEXT DEFAULT 'heuristic_not_ai',first_seen_at TEXT,last_seen_at TEXT);
+ CREATE TABLE representations(id INTEGER PRIMARY KEY,agency_company_id INT,brand_id INT,source_id INT,page_id INT,source_url TEXT,brand_url TEXT,territory TEXT,relationship_status TEXT,extraction_method TEXT,confidence REAL,context TEXT,observed_at TEXT,UNIQUE(agency_company_id,brand_id,source_id,source_url));
+ CREATE TABLE conference_presence(id INTEGER PRIMARY KEY,source_id INT,page_id INT,conference_name TEXT,edition_year INT,entity_type TEXT,company_id INT,brand_id INT,source_url TEXT,linked_url TEXT,extraction_method TEXT,confidence REAL,context TEXT,observed_at TEXT);
+ CREATE TABLE evidence(id INTEGER PRIMARY KEY,source_id INT,page_id INT,subject_type TEXT,subject_id INT,evidence_type TEXT,source_url TEXT,linked_url TEXT,extraction_method TEXT,confidence REAL,excerpt TEXT,observed_at TEXT);
+ CREATE TABLE raw_extractions(id INTEGER PRIMARY KEY,source_id INT,page_id INT,raw_name TEXT,normalized_name TEXT,entity_type TEXT,linked_url TEXT,parent_name TEXT,relationship_label TEXT,extraction_method TEXT,confidence REAL,context TEXT,promoted INT DEFAULT 0,observed_at TEXT);
+ CREATE INDEX ix_brand_score ON brands(preliminary_score DESC); CREATE INDEX ix_rep_brand ON representations(brand_id); CREATE INDEX ix_company_type ON companies(company_type);
+ ''')
+ c.executemany('INSERT INTO metadata VALUES (?,?)',[('schema_version','1'),('scraped_at',NOW),('scope','Public agencies, portfolios, industry reports and conference directories in the registered global source universe.'),('completeness_note','Auditable discovery database; failed and gated sources remain visible. It does not claim an impossible mathematically complete census.')]); return c
+
+def company(c,name,typ,s,website='',desc=''):
+ if not plausible(name): raise ValueError()
+ n=norm(name); now=NOW
+ c.execute('''INSERT INTO companies(canonical_name,normalized_name,company_type,website,region,country,description,first_source_id,first_seen_at,last_seen_at) VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT(normalized_name,company_type) DO UPDATE SET website=CASE WHEN companies.website='' THEN excluded.website ELSE companies.website END,description=CASE WHEN length(excluded.description)>length(companies.description) THEN excluded.description ELSE companies.description END,last_seen_at=excluded.last_seen_at''',(clean(name),n,typ,website,s.get('region',''),s.get('country',''),desc,s['id'],now,now)); return c.execute('SELECT id FROM companies WHERE normalized_name=? AND company_type=?',(n,typ)).fetchone()[0]
+def category(name,ctx=''):
+ h=norm(name+' '+ctx); scores={k:sum(x in h for x in v) for k,v in CATS.items()}; b=max(scores,key=scores.get); return b if scores[b] else 'other'
+def brand(c,name,s,website='',desc=''):
+ if not plausible(name): raise ValueError()
+ n=norm(name); cat=category(name,desc)
+ c.execute('''INSERT INTO brands(canonical_name,normalized_name,website,category,description,first_source_id,first_seen_at,last_seen_at) VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(normalized_name) DO UPDATE SET website=CASE WHEN brands.website='' THEN excluded.website ELSE brands.website END,description=CASE WHEN length(excluded.description)>length(brands.description) THEN excluded.description ELSE brands.description END,category=CASE WHEN brands.category='other' THEN excluded.category ELSE brands.category END,last_seen_at=excluded.last_seen_at''',(clean(name),n,website,cat,desc,s['id'],NOW,NOW)); return c.execute('SELECT id FROM brands WHERE normalized_name=?',(n,)).fetchone()[0]
+def evidence(c,s,p,st,sid,et,e,source_url): c.execute('INSERT INTO evidence(source_id,page_id,subject_type,subject_id,evidence_type,source_url,linked_url,extraction_method,confidence,excerpt,observed_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)',(s['id'],p,st,sid,et,source_url,e.get('link',''),e['method'],e['confidence'],e.get('context','')[:1000],NOW))
+
+def robots(u,session):
+ try:
+  p=urllib.parse.urlsplit(u); ru=f'{p.scheme}://{p.netloc}/robots.txt'; r=session.get(ru,timeout=10)
+  if r.status_code==404:return 'allowed'
+  if r.status_code>=400:return 'unknown'
+  rp=urllib.robotparser.RobotFileParser(); rp.parse(r.text.splitlines()); return 'allowed' if rp.can_fetch(UA,u) else 'disallowed'
+ except:return 'unknown'
+def static(u,session):
+ start=time.monotonic(); rb=robots(u,session)
+ if rb=='disallowed': return dict(requested=u,final=u,status=0,ctype='',title='',html='',method='robots',error='robots.txt disallows crawler',robots=rb,ms=0,json=[])
+ try:
