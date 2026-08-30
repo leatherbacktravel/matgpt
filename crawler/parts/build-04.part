@@ -1,0 +1,48 @@
+   if not vals:vals=[n.get('aria-label','') or n.get('title','') or n.get_text(' ',strip=True)]
+   a=n if n.name=='a' else n.select_one('a[href]'); link=url(a.get('href'),base) if a else ''
+   for v in vals:add(out,v,link,n.get_text(' ',strip=True),'portfolio_card',.84)
+ for n in soup.find_all(True,class_=lambda c:c and SIG.search(' '.join(c) if isinstance(c,list) else str(c))):
+  for a in n.select('a[href]')[:1000]:
+   v=clean(a.get_text(' ',strip=True)); im=a.select_one('img[alt]'); v=v if plausible(v) else clean(im.get('alt')) if im else ''
+   add(out,v,url(a.get('href'),base),a.get_text(' ',strip=True),'semantic_anchor',.76)
+  for im in n.select('img[alt]')[:1000]:
+   a=im.find_parent('a'); add(out,im.get('alt'),url(a.get('href'),base) if a else '',(a or im).get_text(' ',strip=True),'portfolio_image_alt',.69)
+ payloads=list(page.get('json') or [])
+ for sc in soup.select("script[type='application/ld+json'],script#__NEXT_DATA__,script[type='application/json']"):
+  try:payloads.append(json.loads(sc.string or sc.get_text('',strip=True)))
+  except:pass
+ for payload in payloads:
+  for o in walk(payload):
+   if not isinstance(o,dict):continue
+   name=next((o.get(k) for k in ('brandName','companyName','exhibitorName','propertyName','displayName','name','title') if o.get(k)),None)
+   if name:
+    lk=next((o.get(k) for k in ('profileUrl','detailUrl','website','url','href','link') if o.get(k)),''); add(out,name,url(str(lk),base) if lk else '',json.dumps(o,ensure_ascii=False),'embedded_or_network_json',.78)
+ best={}
+ for e in out:
+  k=(norm(e['name']),e['link'],norm(e['parent']),e['type']);
+  if k not in best or e['confidence']>best[k]['confidence']:best[k]=e
+ return list(best.values())
+CLIENT=re.compile(r'^\s*Client\s+List\s*:\s*',re.I)
+def split_clients(t):
+ t=CLIENT.sub('',clean(t)); parts=[]; buf=[]; depth=0
+ for ch in t:
+  if ch in '([{':depth+=1
+  elif ch in ')]}':depth=max(0,depth-1)
+  if depth==0 and ch in ',;':
+   v=clean(''.join(buf)).strip(' .'); buf=[]
+   if plausible(v):parts.append(v)
+  else:buf.append(ch)
+ v=clean(''.join(buf)).strip(' .');
+ if plausible(v):parts.append(v)
+ return parts
+def extract_lg(page):
+ soup=BeautifulSoup(page['html'] or '','lxml'); out=[]
+ for h in soup.find_all(['h2','h3','h4']):
+  agency=clean(h.get_text(' ',strip=True)); clients=''
+  if not plausible(agency):continue
+  for sib in h.next_siblings:
+   if getattr(sib,'name',None) in ('h2','h3','h4'):break
+   if hasattr(sib,'get_text') and CLIENT.match(clean(sib.get_text(' ',strip=True))):clients=clean(sib.get_text(' ',strip=True));break
+  if not clients:continue
+  add(out,agency,'',clients,'licenseglobal_agent_heading',.9,'licensing_agency')
+  for x in split_clients(clients):add(out,x,'',clients,'licenseglobal_client_list',.68,'brand',agency,'agent_supplied_client_list')
