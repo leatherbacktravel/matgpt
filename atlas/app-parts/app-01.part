@@ -1,0 +1,160 @@
+const DATA = {};
+const state = {
+  route: 'overview',
+  queries: { agencies: '', brands: '', relationships: '', sources: '' },
+  category: 'all',
+  quality: 'all',
+  agency: 'all',
+  relationship: 'all',
+  sourceStatus: 'all',
+  limit: 300,
+};
+
+const routes = [
+  ['overview', 'Overview'],
+  ['agencies', 'Agencies'],
+  ['brands', 'Brands & properties'],
+  ['relationships', 'Agency–brand links'],
+  ['sources', 'Sources & failures'],
+  ['database', 'Database'],
+];
+
+const $ = (selector, root = document) => root.querySelector(selector);
+const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
+const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({
+  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+}[char]));
+const fmt = (value) => new Intl.NumberFormat('en-US').format(Number(value || 0));
+const pct = (value) => `${Math.round(Number(value || 0) * 100)}%`;
+const pretty = (value) => String(value || 'unknown').replaceAll('_', ' ');
+const date = (value) => value
+  ? new Date(value).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })
+  : '—';
+const pill = (value) => `<span class="pill ${esc(value)}">${esc(pretty(value))}</span>`;
+const safeHost = (value) => {
+  try { return new URL(value).hostname; } catch { return value || ''; }
+};
+const parseList = (value) => {
+  if (Array.isArray(value)) return value;
+  try {
+    const parsed = JSON.parse(value || '[]');
+    return Array.isArray(parsed) ? parsed : [];
+  } catch { return []; }
+};
+const documentedBrandCount = () => Number(DATA.meta.clean_high_confidence_brands || 0)
+  + Number(DATA.meta.clean_documented_brands || 0);
+
+function renderNav() {
+  for (const id of ['nav', 'mobile-nav']) {
+    const node = $(`#${id}`);
+    if (!node) continue;
+    node.innerHTML = routes.map(([key, label]) => (
+      `<button data-route="${key}" class="${state.route === key ? 'active' : ''}">${label}</button>`
+    )).join('');
+  }
+}
+
+function go(route) {
+  state.route = routes.some(([key]) => key === route) ? route : 'overview';
+  $$('.route').forEach((node) => node.classList.toggle('active', node.id === `route-${state.route}`));
+  renderNav();
+  renderRoute(state.route);
+  history.replaceState(null, '', `#${state.route}`);
+}
+
+function intro(eyebrow, title, lede) {
+  return `<div class="eyebrow">${esc(eyebrow)}</div><h1>${esc(title)}</h1><p class="lede">${esc(lede)}</p>`;
+}
+
+function metricCards() {
+  const m = DATA.meta;
+  const entries = [
+    ['Licensing agencies', m.clean_agencies],
+    ['Documented brands', documentedBrandCount()],
+    ['Agency–brand links', m.clean_relationships],
+    ['Pages captured', m.pages_captured],
+    ['Clean evidence records', m.clean_evidence_records],
+    ['Registered sources', m.registered_sources],
+  ];
+  return `<div class="metrics">${entries.map(([label, value]) => (
+    `<div class="metric"><div class="n">${fmt(value)}</div><div class="l">${esc(label)}</div></div>`
+  )).join('')}</div>`;
+}
+
+function cap(items) {
+  return { rows: items.slice(0, state.limit), total: items.length };
+}
+
+function resultCount(total, shown) {
+  return `<span class="pill">${fmt(total)} matched${shown < total ? ` · first ${fmt(shown)} shown` : ''}</span>`;
+}
+
+function qualityOrder(a, b) {
+  return Number(b.quality_score || 0) - Number(a.quality_score || 0)
+    || Number(b.evidence_count || 0) - Number(a.evidence_count || 0)
+    || Number(b.agency_count || 0) - Number(a.agency_count || 0)
+    || String(a.canonical_name || '').localeCompare(String(b.canonical_name || ''));
+}
+
+function brandTable(items) {
+  return `<table><thead><tr>
+    <th>Brand / property</th><th>Category</th><th>Quality</th><th>Agencies</th>
+    <th>Evidence</th><th>First-party evidence</th><th>Sources</th>
+  </tr></thead><tbody>${items.map((item) => `<tr data-brand-id="${item.id}">
+    <td><div class="name">${esc(item.canonical_name)}</div>${item.website
+      ? `<a class="small link" target="_blank" rel="noopener" href="${esc(item.website)}" onclick="event.stopPropagation()">${esc(safeHost(item.website))}</a>`
+      : ''}</td>
+    <td>${pill(item.category || 'other')}</td>
+    <td>${pill(item.quality_status)} <span class="score">${pct(item.quality_score)}</span></td>
+    <td><b>${fmt(item.agency_count)}</b></td>
+    <td>${fmt(item.evidence_count)}</td>
+    <td>${fmt(item.first_party_evidence_count)}</td>
+    <td>${fmt(item.source_count)}</td>
+  </tr>`).join('')}</tbody></table>`;
+}
+
+function agencyTable(items) {
+  return `<table><thead><tr>
+    <th>Agency</th><th>Region</th><th>Focus</th><th>Brands found</th>
+    <th>First-party portfolio</th><th>Agent list</th><th>Sources</th><th>Website</th>
+  </tr></thead><tbody>${items.map((item) => `<tr data-agency-id="${item.id}">
+    <td><div class="name">${esc(item.canonical_name)}</div><div class="small">${esc(item.country || '')}</div></td>
+    <td>${esc(item.region || '—')}</td>
+    <td class="small">${esc(item.description || '—')}</td>
+    <td><b>${fmt(item.represented_brand_count)}</b></td>
+    <td>${fmt(item.first_party_brand_count)}</td>
+    <td>${fmt(item.agent_list_brand_count)}</td>
+    <td>${fmt(item.source_count)}</td>
+    <td>${item.website
+      ? `<a class="link" target="_blank" rel="noopener" href="${esc(item.website)}" onclick="event.stopPropagation()">Open</a>`
+      : '—'}</td>
+  </tr>`).join('')}</tbody></table>`;
+}
+
+function renderOverview() {
+  const m = DATA.meta;
+  const categories = {};
+  DATA.brands.forEach((item) => {
+    const key = item.category || 'other';
+    categories[key] = (categories[key] || 0) + 1;
+  });
+  const maxCategory = Math.max(1, ...Object.values(categories));
+  const strongest = [...DATA.brands].sort(qualityOrder).slice(0, 30);
+  const failed = DATA.sources.filter((item) => item.status !== 'complete');
+
+  $('#route-overview').innerHTML = `
+    ${intro(
+      'Live research corpus',
+      'Licensing-market database',
+      'This interface is reading the populated crawl and deterministic clean layer. It does not use the withdrawn Top 50 or browser-local seed data.',
+    )}
+    ${metricCards()}
+    <div class="notice"><b>Coverage:</b> ${esc(m.scope)} ${esc(m.completeness_caveat)}</div>
+    <section class="panel">
+      <div class="panel-head"><div><h2>Raw crawl → clean discovery layer</h2><p>The complete raw material remains in SQLite. Obvious navigation, country, font, page-metadata and article-headline noise is excluded from the clean tables.</p></div></div>
+      <div class="source-cards">
+        ${[
+          ['Raw extracted strings', m.raw_brand_strings],
+          ['Clean candidate records', m.clean_brands],
+          ['Documented / high confidence', documentedBrandCount()],
+          ['Review queue', m.clean_review_brands],
