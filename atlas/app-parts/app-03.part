@@ -1,0 +1,90 @@
+      return `<tr data-brand-id="${item.brand_id}"><td class="name">${esc(item.agency_name)}</td><td>${esc(item.brand_name)}</td><td>${pill(item.category || 'other')}</td><td class="small">${esc(pretty(item.relationship_status))}</td><td class="score">${pct(item.quality_score)}</td><td>${source ? `<a class="link" href="${esc(source)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Source</a>` : '—'}</td></tr>`;
+    }).join('')}</tbody></table></div></section>`;
+}
+
+function renderSources() {
+  const statuses = ['all', 'complete', 'failed', 'skipped_gated', 'pending'];
+  const query = state.queries.sources.trim().toLowerCase();
+  const matched = DATA.sources.filter((item) => (
+    (state.sourceStatus === 'all' || item.status === state.sourceStatus)
+    && (!query || [item.name, item.agency_name, item.source_type, item.region, item.error, item.crawl_url].join(' ').toLowerCase().includes(query))
+  ));
+  const { rows, total } = cap(matched);
+  $('#route-sources').innerHTML = `
+    ${intro('Acquisition audit', 'Sources & failures', 'The complete registered source universe is shown here, including failed, blocked and login-gated sources. No failed source is silently removed.')}
+    <div class="toolbar">
+      <input class="input" id="source-q" value="${esc(state.queries.sources)}" placeholder="Search source, agency, URL or error">
+      <select class="select" id="source-status">${statuses.map((value) => `<option value="${esc(value)}" ${value === state.sourceStatus ? 'selected' : ''}>${esc(pretty(value))}</option>`).join('')}</select>
+      ${resultCount(total, rows.length)}
+    </div>
+    <section class="panel"><div class="table-wrap"><table><thead><tr>
+      <th>Source</th><th>Type</th><th>Status</th><th>Pages</th><th>Raw / promoted</th><th>HTTP</th><th>Error or note</th><th>URL</th>
+    </tr></thead><tbody>${rows.map((item) => `<tr>
+      <td><div class="name">${esc(item.name)}</div><div class="small">${esc(item.agency_name || item.region || '')}</div></td>
+      <td class="small">${esc(pretty(item.source_type))}</td><td>${pill(item.status)}</td><td>${fmt(item.pages_fetched)}</td>
+      <td>${fmt(item.raw_candidates)} / ${fmt(item.promoted_entities)}</td><td>${item.http_status || '—'}</td>
+      <td class="small">${esc(item.error || item.notes || '—')}</td>
+      <td><a class="link" href="${esc(item.final_url || item.crawl_url)}" target="_blank" rel="noopener">Open</a></td>
+    </tr>`).join('')}</tbody></table></div></section>`;
+}
+
+function renderDatabase() {
+  const files = [
+    ['Clean + raw SQLite database', 'licensing_database.sqlite', 'The complete relational database: raw crawl tables plus clean_agencies, clean_brands, clean_representations and clean_evidence.'],
+    ['Clean brands JSON', 'brands.json', 'High-confidence and documented properties used by this application.'],
+    ['Review queue JSON', 'review_brands.json', 'Lower-confidence candidate records kept out of the main interface.'],
+    ['Clean agencies JSON', 'agencies.json', 'Deduplicated agency records and extracted portfolio counts.'],
+    ['Clean relationships JSON', 'representations.json', 'Agency–brand evidence links and quality scores.'],
+    ['Full sources JSON', 'sources.json', 'All registered sources, statuses, URLs and crawl errors.'],
+    ['AI analysis queue', 'analysis_queue.json', 'Structured clean candidates prepared for the separate AI-ranking stage.'],
+    ['Brands CSV', 'brands.csv', 'Spreadsheet-friendly clean brand export.'],
+    ['Relationships CSV', 'representations.csv', 'Spreadsheet-friendly clean agency–brand map.'],
+    ['Quality report', 'QUALITY_REPORT.md', 'Human-readable raw-to-clean counts and methodology.'],
+  ];
+  $('#route-database').innerHTML = `
+    ${intro('Underlying files', 'Database', 'This is a generated relational database, not mock data or local browser storage. The raw crawl and cleaned tables are kept together for auditability.')}
+    ${metricCards()}
+    <section class="panel"><div class="panel-head"><div><h2>Database and machine-readable exports</h2><p>Generated ${date(DATA.meta.generated_at)}</p></div></div>
+      <div class="db-links">${files.map(([title, file, description]) => `<a class="db-link" href="database-v3/${file}" target="_blank"><b>${esc(title)}</b><span class="small">${esc(description)}</span></a>`).join('')}</div>
+    </section>
+    <section class="panel"><div class="panel-head"><div><h2>Raw crawl archive</h2><p>Uncleaned extraction layer retained for reproducibility and future parser improvements.</p></div></div>
+      <div class="db-links">
+        <a class="db-link" href="database-v2/CRAWL_REPORT.md" target="_blank"><b>Raw crawl report</b><span class="small">Original acquisition counts and incomplete-source audit.</span></a>
+        <a class="db-link" href="database-v2/brands.json" target="_blank"><b>Raw extracted brand strings</b><span class="small">Contains noise by design; use only for parser auditing.</span></a>
+        <a class="db-link" href="database-v2/representations.json" target="_blank"><b>Raw relationship extractions</b><span class="small">All promoted first-pass mappings before deterministic cleaning.</span></a>
+      </div>
+    </section>
+    <div class="notice"><b>Ranking status:</b> ${esc(pretty(DATA.meta.ranking_status))}. The database-building step is complete. The final AI-reviewed Leatherback Top 50 is a separate stage and is not being simulated by the deterministic score fields.</div>`;
+}
+
+function renderRoute(route) {
+  if (!DATA.meta) return;
+  ({
+    overview: renderOverview,
+    agencies: renderAgencies,
+    brands: renderBrands,
+    relationships: renderRelationships,
+    sources: renderSources,
+    database: renderDatabase,
+  }[route] || renderOverview)();
+  bindRoute();
+}
+
+function openDrawer(content) {
+  $('#drawer').innerHTML = content;
+  $('#drawer-bg').classList.add('open');
+}
+function closeDrawer() { $('#drawer-bg').classList.remove('open'); }
+
+function brandDetails(id) {
+  const item = DATA.brandsById.get(Number(id));
+  if (!item) return;
+  const reps = DATA.repsByBrand.get(Number(id)) || [];
+  openDrawer(`
+    <button class="drawer-close" data-close>×</button><div class="eyebrow">Documented property</div>
+    <h1 style="font-size:29px">${esc(item.canonical_name)}</h1>
+    <p class="lede">This record survived deterministic quality filtering. It still requires direct rights verification before outreach.</p>
+    <div class="detail-grid">
+      <div class="detail-item"><b>Category</b>${esc(pretty(item.category))}</div>
+      <div class="detail-item"><b>Evidence quality</b>${pct(item.quality_score)} · ${esc(pretty(item.quality_status))}</div>
+      <div class="detail-item"><b>Evidence records</b>${fmt(item.evidence_count)}</div>
