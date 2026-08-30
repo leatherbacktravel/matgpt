@@ -1,0 +1,94 @@
+name: Clean Licensing Market Database
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [gh-pages]
+    paths:
+      - 'crawler/clean-parts/**'
+      - '.github/workflows/clean-licensing-database.yml'
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: licensing-market-database-clean
+  cancel-in-progress: true
+
+jobs:
+  clean:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out populated database branch
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          fetch-depth: 1
+
+      - name: Assemble deterministic cleaner
+        run: |
+          cat crawler/clean-parts/clean-*.part > crawler/clean_database.py
+          python -m py_compile crawler/clean_database.py
+          test -s database-v2/licensing_database.sqlite
+
+      - name: Build clean relational layer and app exports
+        run: |
+          rm -rf database-v3
+          python crawler/clean_database.py --input database-v2/licensing_database.sqlite --output database-v3 | tee /tmp/licensing-clean.log
+
+      - name: Validate raw and clean layers
+        run: |
+          python - <<'PY'
+          import json, sqlite3
+          from pathlib import Path
+          db=Path('database-v3/licensing_database.sqlite')
+          assert db.exists() and db.stat().st_size > 30_000_000, db
+          con=sqlite3.connect(db)
+          assert con.execute('pragma integrity_check').fetchone()[0]=='ok'
+          checks={
+            'registered_sources':con.execute('select count(*) from sources').fetchone()[0],
+            'pages':con.execute('select count(*) from pages').fetchone()[0],
+            'raw_brands':con.execute('select count(*) from brands').fetchone()[0],
+            'clean_agencies':con.execute('select count(*) from clean_agencies').fetchone()[0],
+            'clean_brands':con.execute('select count(*) from clean_brands').fetchone()[0],
+            'clean_representations':con.execute('select count(*) from clean_representations').fetchone()[0],
+            'clean_evidence':con.execute('select count(*) from clean_evidence').fetchone()[0],
+          }
+          print(json.dumps(checks,indent=2))
+          assert checks['registered_sources']>=90,checks
+          assert checks['pages']>0,checks
+          assert checks['raw_brands']>1000,checks
+          assert checks['clean_agencies']>=80,checks
+          assert checks['clean_brands']>=1000,checks
+          assert checks['clean_representations']>=1000,checks
+          assert checks['clean_evidence']>=2000,checks
+          con.close()
+          meta=json.loads(Path('database-v3/metadata.json').read_text())
+          assert meta['raw_brand_strings']>meta['clean_brands']
+          assert meta['ranking_status']=='database_built_cleaned_ai_ranking_not_yet_complete'
+          PY
+
+      - name: Commit clean database and exports
+        run: |
+          git config user.name 'Leatherback Licensing Database Bot'
+          git config user.email 'matthew@leatherbacktravel.com'
+          git pull --rebase origin gh-pages
+          git add -A database-v3
+          if git diff --cached --quiet; then
+            echo 'No clean database changes to commit.'
+          else
+            git commit -m 'Publish cleaned licensing market database'
+            git push origin HEAD:gh-pages
+          fi
+
+      - name: Upload quality log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: licensing-database-clean-log
+          path: /tmp/licensing-clean.log
+          retention-days: 14
+          if-no-files-found: ignore
