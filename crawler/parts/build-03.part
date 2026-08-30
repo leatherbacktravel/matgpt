@@ -1,0 +1,48 @@
+  r=session.get(u,timeout=TIMEOUT,allow_redirects=True); body=r.content[:3_000_000]; text=body.decode(r.encoding or 'utf-8','replace'); soup=BeautifulSoup(text,'lxml')
+  return dict(requested=u,final=str(r.url),status=r.status_code,ctype=r.headers.get('content-type',''),title=clean(soup.title.get_text(' ',strip=True) if soup.title else ''),html=text,method='static',error='',robots=rb,ms=int((time.monotonic()-start)*1000),json=[])
+ except Exception as x:return dict(requested=u,final=u,status=0,ctype='',title='',html='',method='static',error=f'{type(x).__name__}: {x}',robots=rb,ms=int((time.monotonic()-start)*1000),json=[])
+async def browser(u,rounds=12):
+ start=time.monotonic(); captured=[]
+ try:
+  async with async_playwright() as p:
+   b=await p.chromium.launch(headless=True); ctx=await b.new_context(user_agent=UA,viewport={'width':1440,'height':1100},locale='en-GB',ignore_https_errors=True); pg=await ctx.new_page()
+   async def onres(r):
+    if 'json' in (r.headers.get('content-type') or '').lower() or any(x in r.url.lower() for x in ('api','catalog','directory','search','exhibitor','brand')):
+     try:
+      if len(captured)<100: captured.append(await r.json())
+     except: pass
+   pg.on('response',onres); await pg.goto(u,wait_until='domcontentloaded',timeout=45_000)
+   try: await pg.wait_for_load_state('networkidle',timeout=12_000)
+   except: pass
+   prev=stable=0
+   for _ in range(min(rounds,25)):
+    h=await pg.evaluate('document.body.scrollHeight'); await pg.evaluate('window.scrollTo(0,document.body.scrollHeight)'); await pg.wait_for_timeout(500)
+    for label in ('Load more','Show more','View more','More results','See more'):
+     q=pg.get_by_text(label,exact=False)
+     if await q.count():
+      try: await q.first.click(timeout=700); await pg.wait_for_timeout(400)
+      except: pass
+    stable=stable+1 if h==prev else 0; prev=h
+    if stable>=2:break
+   out=dict(requested=u,final=pg.url,status=200,ctype='text/html',title=clean(await pg.title()),html=await pg.content(),method='browser',error='',robots='checked_static_or_unknown',ms=int((time.monotonic()-start)*1000),json=captured); await b.close(); return out
+ except Exception as x:return dict(requested=u,final=u,status=0,ctype='',title='',html='',method='browser',error=f'{type(x).__name__}: {x}',robots='unknown',ms=int((time.monotonic()-start)*1000),json=[])
+
+def walk(v):
+ yield v
+ if isinstance(v,dict):
+  for x in v.values(): yield from walk(x)
+ elif isinstance(v,list):
+  for x in v: yield from walk(x)
+def add(out,name,link,ctx,method,conf,typ='brand',parent='',rel=''):
+ name=clean(name); link=url(link)
+ if plausible(name): out.append(dict(name=name,link=link,context=clean(ctx)[:1000],method=method,confidence=conf,type=typ,parent=clean(parent),relationship=rel))
+def extract_generic(page):
+ soup=BeautifulSoup(page['html'] or '','lxml'); out=[]; base=page['final']
+ selectors=['.brand','.brand-card','.client','.client-card','.portfolio-item','.property','.property-card','.roster-item','.logo-grid > *','.client-grid > *',"[class*='brand-card']","[class*='client-card']","[class*='portfolio-item']","[class*='property-card']","[data-testid*='card']","a[href*='/brand']","a[href*='/client']","a[href*='/portfolio']","a[href*='/property']"]
+ for sel in selectors:
+  try:nodes=soup.select(sel)
+  except:continue
+  for n in nodes[:5000]:
+   vals=[]
+   for q in ('h1','h2','h3','h4',"[class*='title']","[class*='name']","img[alt]"):
+    for z in n.select(q)[:3]: vals.append(z.get('alt','') if z.name=='img' else z.get_text(' ',strip=True))
