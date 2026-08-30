@@ -1,0 +1,146 @@
+name: Verify Live Licensing Database
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [gh-pages]
+    paths:
+      - "index.html"
+      - "data/licensing_universe.json"
+      - ".github/workflows/verify-live-database.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: verify-live-licensing-database
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          fetch-depth: 1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --disable-pip-version-check selenium==4.35.0
+      - name: Verify public database and exercise the web app
+        run: |
+          python - <<'PY'
+          import json
+          import time
+          import urllib.request
+          from datetime import datetime, timezone
+          from pathlib import Path
+          from selenium import webdriver
+          from selenium.webdriver.chrome.options import Options
+          from selenium.webdriver.common.by import By
+          from selenium.webdriver.support.ui import WebDriverWait
+
+          APP = "https://leatherbacktravel.github.io/matgpt/"
+          DATA = APP + "data/licensing_universe.json"
+          local = json.loads(Path("data/licensing_universe.json").read_text())
+          expected_run = local["metadata"]["run_id"]
+
+          public = None
+          last_error = None
+          for _ in range(40):
+              try:
+                  request = urllib.request.Request(DATA, headers={"Cache-Control":"no-cache", "User-Agent":"Leatherback-Live-Verifier"})
+                  with urllib.request.urlopen(request, timeout=30) as response:
+                      candidate = json.load(response)
+                  if candidate.get("metadata", {}).get("run_id") == expected_run:
+                      public = candidate
+                      break
+              except Exception as exc:
+                  last_error = repr(exc)
+              time.sleep(10)
+          assert public is not None, f"Public data did not reach run {expected_run}: {last_error}"
+
+          counts = public["counts"]
+          assert counts["all_organisations"] >= 75, counts
+          assert counts["licensing_agencies"] >= 25, counts
+          assert counts["pages_captured"] >= 40, counts
+          assert counts["sources_registered"] >= 50, counts
+
+          options = Options()
+          options.add_argument("--headless=new")
+          options.add_argument("--no-sandbox")
+          options.add_argument("--disable-dev-shm-usage")
+          options.add_argument("--window-size=1500,1100")
+          driver = webdriver.Chrome(options=options)
+          wait = WebDriverWait(driver, 45)
+          proof = {
+              "verified_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+              "app_url": APP,
+              "database_url": DATA,
+              "run_id": expected_run,
+              "counts": counts,
+          }
+          try:
+              driver.get(APP)
+              wait.until(lambda d: d.find_element(By.CSS_SELECTOR, "h1").text == "Licensing universe database")
+              proof["overview_loaded"] = True
+              proof["metric_cards"] = len(driver.find_elements(By.CSS_SELECTOR, ".metric"))
+              proof["database_download_links"] = len(driver.find_elements(By.CSS_SELECTOR, "a[download]"))
+
+              driver.find_element(By.CSS_SELECTOR, '#nav [data-route="agencies"]').click()
+              wait.until(lambda d: d.find_element(By.CSS_SELECTOR, "h1").text == "Licensing agencies")
+              proof["agency_rows_visible"] = len(driver.find_elements(By.CSS_SELECTOR, "tbody tr"))
+              assert proof["agency_rows_visible"] > 0
+              driver.find_elements(By.CSS_SELECTOR, "tbody tr")[0].click()
+              wait.until(lambda d: d.find_elements(By.CSS_SELECTOR, ".drawer.open"))
+              proof["agency_detail_opened"] = driver.find_element(By.CSS_SELECTOR, ".drawer h2").text
+              driver.find_element(By.CSS_SELECTOR, ".drawer .close").click()
+
+              driver.find_element(By.CSS_SELECTOR, '#nav [data-route="properties"]').click()
+              wait.until(lambda d: d.find_element(By.CSS_SELECTOR, "h1").text == "Brands & properties")
+              proof["property_rows_visible"] = len(driver.find_elements(By.CSS_SELECTOR, "tbody tr"))
+
+              driver.find_element(By.CSS_SELECTOR, '#nav [data-route="relationships"]').click()
+              wait.until(lambda d: d.find_element(By.CSS_SELECTOR, "h1").text == "Agency–client representations")
+              proof["relationship_rows_visible"] = len(driver.find_elements(By.CSS_SELECTOR, "tbody tr"))
+
+              driver.find_element(By.CSS_SELECTOR, '#nav [data-route="sources"]').click()
+              wait.until(lambda d: d.find_element(By.CSS_SELECTOR, "h1").text == "Source ledger")
+              proof["source_rows_visible"] = len(driver.find_elements(By.CSS_SELECTOR, "tbody tr"))
+              search = driver.find_element(By.ID, "search")
+              search.send_keys("licensing")
+              time.sleep(0.5)
+              proof["filtered_rows_visible"] = len(driver.find_elements(By.CSS_SELECTOR, "tbody tr"))
+
+              severe = [x for x in driver.get_log("browser") if x.get("level") == "SEVERE" and "favicon" not in x.get("message", "").lower()]
+              proof["severe_console_errors"] = severe
+              assert proof["metric_cards"] == 4, proof
+              assert proof["database_download_links"] >= 3, proof
+              assert proof["source_rows_visible"] > 0, proof
+              assert not severe, proof
+              proof["ok"] = True
+              driver.save_screenshot("/tmp/licensing-database-live.png")
+          finally:
+              driver.quit()
+
+          Path("data/live_verification.json").write_text(json.dumps(proof, indent=2), encoding="utf-8")
+          print(json.dumps(proof, indent=2))
+          PY
+      - name: Commit public verification proof
+        run: |
+          git config user.name "Leatherback Licensing Atlas Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add -f data/live_verification.json
+          git commit -m "Record live database verification [skip ci]" || exit 0
+          git pull --rebase origin gh-pages
+          git push origin HEAD:gh-pages
+      - name: Upload browser screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-licensing-database-verification
+          path: /tmp/licensing-database-live.png
+          if-no-files-found: ignore
+          retention-days: 14
