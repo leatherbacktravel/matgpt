@@ -1,0 +1,38 @@
+name: Export Licensing Database
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [gh-pages]
+    paths:
+      - '.github/workflows/export-licensing-database.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+      - name: Validate export exists
+        run: |
+          test -s database-v2/licensing_database.sqlite
+          test -s database-v2/metadata.json
+      - name: Upload database export
+        uses: actions/upload-artifact@v4
+        with:
+          name: populated-licensing-database
+          path: |
+            database-v2/licensing_database.sqlite
+            database-v2/metadata.json
+            database-v2/agencies.json
+            database-v2/brands.json
+            database-v2/representations.json
+            database-v2/sources.json
+            database-v2/analysis_queue.json
+            database-v2/CRAWL_REPORT.md
+          retention-days: 7
+          compression-level: 6
