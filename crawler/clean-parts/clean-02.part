@@ -1,0 +1,76 @@
+>=.80: status='documented'
+        elif quality>=.70: status='review'
+        else: continue
+        canonical=max(items,key=lambda x:name_score(x['name'],x['reason']))['name']
+        urls=[x['brand_url'] for x in sorted(items,key=lambda x:x['quality'],reverse=True) if x['brand_url'] and valid_detail_url(x['brand_url'])]
+        website=urls[0] if urls else ''
+        hints=[h for x in items for h in x['category_hints']]
+        cat=classify_category(canonical,hints); fit=TRAVEL_FIT[cat]
+        readiness=min(96,round(quality*100*.7+min(20,len(agency_ids)*8)+min(10,len(source_ids)*3),1))
+        opportunity=round(fit*.48+readiness*.32+quality*100*.20,1)
+        cur=con.execute('insert into clean_brands(canonical_name,normalized_name,website,category,quality_status,quality_score,source_count,evidence_count,agency_count,first_party_evidence_count,travel_fit_score,licensing_readiness_score,preliminary_opportunity_score,score_basis,generated_at) values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',(canonical,key,website,cat,status,round(quality,3),len(source_ids),len(items),len(agency_ids),first,fit,readiness,opportunity,'deterministic_triage_not_ai_ranked',NOW))
+        bid=cur.lastrowid; clean_brand_id[key]=bid; brand_records.append((bid,key,items))
+        for x in items:
+            con.execute('insert into clean_evidence(brand_id,agency_id,source_id,source_url,brand_url,extraction_method,quality_score,evidence_reason,context,observed_at) values (?,?,?,?,?,?,?,?,?,?)',(bid,x['agency_id'],x['source_id'],x['source_url'],x['brand_url'],x['method'],x['quality'],x['reason'],x['context'],x['observed_at']))
+    for bid,key,items in brand_records:
+        by_agency=defaultdict(list)
+        for x in items: by_agency[x['agency_id']].append(x)
+        for aid,xs in by_agency.items():
+            q=max(x['quality'] for x in xs); reasons={x['reason'] for x in xs}; source_ids={x['source_id'] for x in xs}
+            if any(r.startswith('structured first-party') or 'portfolio' in r for r in reasons): rel='first_party_portfolio_presence'
+            elif 'agent-supplied License Global client list' in reasons: rel='agent_supplied_client_listing'
+            else: rel='first_party_article_reference'
+            brand_url=next((x['brand_url'] for x in sorted(xs,key=lambda z:z['quality'],reverse=True) if valid_detail_url(x['brand_url'])), '')
+            con.execute('insert into clean_representations(agency_id,brand_id,relationship_status,quality_score,evidence_count,source_count,brand_url,source_urls,methods,generated_at) values (?,?,?,?,?,?,?,?,?,?)',(aid,bid,rel,round(q,3),len(xs),len(source_ids),brand_url,json.dumps(sorted({x['source_url'] for x in xs if x['source_url']})),json.dumps(sorted({x['method'] for x in xs})),NOW))
+    con.execute('update clean_agencies set represented_brand_count=(select count(*) from clean_representations r where r.agency_id=clean_agencies.id),first_party_brand_count=(select count(*) from clean_representations r where r.agency_id=clean_agencies.id and r.relationship_status="first_party_portfolio_presence"),agent_list_brand_count=(select count(*) from clean_representations r where r.agency_id=clean_agencies.id and r.relationship_status="agent_supplied_client_listing")')
+    raw_counts={
+        'registered_sources':con.execute('select count(*) from sources').fetchone()[0],
+        'sources_complete':con.execute("select count(*) from sources where status='complete'").fetchone()[0],
+        'sources_failed':con.execute("select count(*) from sources where status='failed'").fetchone()[0],
+        'sources_skipped_gated':con.execute("select count(*) from sources where status='skipped_gated'").fetchone()[0],
+        'pages_captured':con.execute('select count(*) from pages').fetchone()[0],
+        'raw_agencies':con.execute("select count(*) from companies where company_type='licensing_agency'").fetchone()[0],
+        'raw_market_participants':con.execute('select count(*) from companies').fetchone()[0],
+        'raw_brand_strings':con.execute('select count(*) from brands').fetchone()[0],
+        'raw_relationships':con.execute('select count(*) from representations').fetchone()[0],
+        'raw_conference_records':con.execute('select count(*) from conference_presence').fetchone()[0],
+        'raw_evidence_records':con.execute('select count(*) from evidence').fetchone()[0],
+        'clean_agencies':con.execute('select count(*) from clean_agencies').fetchone()[0],
+        'clean_brands':con.execute('select count(*) from clean_brands').fetchone()[0],
+        'clean_high_confidence_brands':con.execute("select count(*) from clean_brands where quality_status='high_confidence'").fetchone()[0],
+        'clean_documented_brands':con.execute("select count(*) from clean_brands where quality_status='documented'").fetchone()[0],
+        'clean_review_brands':con.execute("select count(*) from clean_brands where quality_status='review'").fetchone()[0],
+        'clean_relationships':con.execute('select count(*) from clean_representations').fetchone()[0],
+        'clean_evidence_records':con.execute('select count(*) from clean_evidence').fetchone()[0],
+    }
+    raw_counts['rejected_or_unresolved_brand_strings']=raw_counts['raw_brand_strings']-raw_counts['clean_brands']
+    for k,v in raw_counts.items(): con.execute('insert into quality_summary values (?,?)',(k,str(v)))
+    con.commit()
+    # Export compact application datasets.
+    def rows(q): return [dict(x) for x in con.execute(q)]
+    meta={**raw_counts,'generated_at':NOW,'scope':'A public-web discovery corpus spanning registered licensing agencies, agency portfolios, licensing conference directories and industry client lists.','completeness_caveat':'No public crawl can prove a mathematically complete census. Every registered failure and gated source remains visible, and the raw corpus is preserved in SQLite.','quality_method':'Deterministic extraction-shape and evidence-quality filtering. High-confidence/documented do not establish legal availability of travel rights.','ranking_status':'database_built_cleaned_ai_ranking_not_yet_complete'}
+    datasets={
+        'metadata.json':meta,
+        'agencies.json':rows('select * from clean_agencies order by represented_brand_count desc,canonical_name'),
+        'brands.json':rows("select * from clean_brands where quality_status in ('high_confidence','documented') order by preliminary_opportunity_score desc,quality_score desc,canonical_name"),
+        'review_brands.json':rows("select * from clean_brands where quality_status='review' order by quality_score desc,canonical_name"),
+        'representations.json':rows("select r.*,a.canonical_name agency_name,b.canonical_name brand_name,b.category,b.quality_status,b.preliminary_opportunity_score from clean_representations r join clean_agencies a on a.id=r.agency_id join clean_brands b on b.id=r.brand_id where b.quality_status in ('high_confidence','documented') order by a.canonical_name,b.canonical_name"),
+        'sources.json':rows('select * from sources order by priority,id'),
+        'analysis_queue.json':rows("select b.*,group_concat(distinct a.canonical_name) agencies from clean_brands b left join clean_representations r on r.brand_id=b.id left join clean_agencies a on a.id=r.agency_id where b.quality_status in ('high_confidence','documented') group by b.id order by b.preliminary_opportunity_score desc,b.quality_score desc,b.canonical_name"),
+    }
+    for name,data in datasets.items(): (out/name).write_text(json.dumps(data,ensure_ascii=False,separators=(',',':')),encoding='utf-8')
+    for name,q in {
+        'agencies.csv':'select * from clean_agencies order by represented_brand_count desc,canonical_name',
+        'brands.csv':'select * from clean_brands order by preliminary_opportunity_score desc,canonical_name',
+        'representations.csv':'select r.id,a.canonical_name agency,b.canonical_name brand,r.relationship_status,r.quality_score,r.evidence_count,r.brand_url,r.source_urls,r.methods from clean_representations r join clean_agencies a on a.id=r.agency_id join clean_brands b on b.id=r.brand_id order by agency,brand',
+        'sources.csv':'select * from sources order by priority,id'} .items():
+        data=rows(q)
+        with open(out/name,'w',newline='',encoding='utf-8') as f:
+            if data:
+                w=csv.DictWriter(f,fieldnames=data[0].keys()); w.writeheader(); w.writerows(data)
+    failures=rows("select name,source_type,crawl_url,http_status,robots_status,error from sources where status!='complete' order by priority,id")
+    lines=['# Leatherback Licensing Database — Quality Report','',f'Generated: `{NOW}`','','## Corpus counts','']+[f"- **{k.replace('_',' ').title()}**: {v:,}" for k,v in raw_counts.items()]+['','## Interpretation','','- The SQLite database contains both the complete raw crawl and the deterministic clean layer.','- `clean_brands` excludes navigation labels, fonts, countries, page metadata, article headlines, analytics components and other non-brand strings.','- The preliminary opportunity score is a triage heuristic, not the final AI-reviewed ranking.','- A portfolio listing is evidence of representation activity, not proof that travel rights are currently unencumbered.','','## Sources not completed','','| Source | Type | HTTP | Robots | Error |','|---|---|---:|---|---|']+[f"| {x['name']} | {x['source_type']} | {x['http_status'] or ''} | {x['robots_status'] or ''} | {(x['error'] or '')[:240].replace('|','/')} |" for x in failures]
+    (out/'QUALITY_REPORT.md').write_text('\n'.join(lines),encoding='utf-8')
+    con.close(); print(json.dumps(meta,indent=2))
+
+if __name__=='__main__': main()
