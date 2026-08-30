@@ -30,7 +30,9 @@ jobs:
 
       - name: Assemble deterministic cleaner
         run: |
-          cat crawler/clean-parts/clean-*.part > crawler/clean_database.py
+          cat crawler/clean-parts/clean-00.part > crawler/clean_database.py
+          tail -c +7 crawler/clean-parts/clean-01.part >> crawler/clean_database.py
+          cat crawler/clean-parts/clean-02.part >> crawler/clean_database.py
           python -m py_compile crawler/clean_database.py
           test -s database-v2/licensing_database.sqlite
 
