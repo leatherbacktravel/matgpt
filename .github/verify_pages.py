@@ -14,7 +14,7 @@ options.add_argument("--disable-dev-shm-usage")
 options.add_argument("--window-size=1440,1000")
 
 driver = webdriver.Chrome(options=options)
-wait = WebDriverWait(driver, 35)
+wait = WebDriverWait(driver, 60)
 results = {"url": URL}
 
 try:
@@ -72,6 +72,16 @@ try:
     wait.until(lambda d: d.find_element(By.CSS_SELECTOR, "h1").text == "Licensing candidates")
     results["local_persistence_after_refresh"] = len(driver.find_elements(By.XPATH, "//*[normalize-space(text())='Automated Test Brand']")) > 0
 
+    driver.find_element(By.CSS_SELECTOR, '#side-nav [data-route="research"]').click()
+    wait.until(lambda d: d.find_element(By.CSS_SELECTOR, "h1").text == "Research run")
+    research_url = driver.find_element(By.ID, "research-url")
+    research_url.clear()
+    research_url.send_keys("https://example.com")
+    driver.find_element(By.CSS_SELECTOR, '[data-research-mode="inspect"]').click()
+    wait.until(lambda d: len(d.find_elements(By.CSS_SELECTOR, ".run-status.success")) >= 1)
+    results["research_result_title"] = driver.find_element(By.CSS_SELECTOR, ".run-status.success .run-head strong").text
+    results["research_runner_success"] = "Example Domain" in results["research_result_title"]
+
     driver.save_screenshot("/tmp/licensing-atlas-verification.png")
 
     severe = [
@@ -88,6 +98,7 @@ try:
     assert results["review_cards_after_approval"] == 49, results
     assert results["custom_candidate_visible"], results
     assert results["local_persistence_after_refresh"], results
+    assert results["research_runner_success"], results
     assert not severe, results
 
     results["ok"] = True
