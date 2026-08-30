@@ -1,0 +1,165 @@
+ True
+        if 'clientName' in keys and ('year' in keys or 'categories' in keys): return True
+        if {'description','id','name'} <= keys and not any(k in keys for k in ('slug','logo','image')): return True
+    return False
+
+def canonical_agency(v):
+    n=norm(v)
+    return AGENCY_ALIASES.get(n,clean_text(v))
+
+def valid_detail_url(v): return bool(v and BRAND_PATH.search(v))
+
+def url_key(v):
+    if not v: return ''
+    try:
+        p=urllib.parse.urlsplit(v); path=re.sub(r'/+','/',p.path).rstrip('/')
+        return urllib.parse.urlunsplit((p.scheme.lower(),p.netloc.lower().removeprefix('www.'),path,'',''))
+    except Exception: return ''
+
+def slug_name(v):
+    try:
+        p=urllib.parse.urlsplit(v); slug=p.path.rstrip('/').split('/')[-1]
+        if not slug or re.match(r'(?i)^project-',slug): return ''
+        return clean_text(re.sub(r'[-_]+',' ',slug)).title()
+    except Exception: return ''
+
+def name_score(v,reason=''):
+    x=clean_text(v); score=0
+    if reason.startswith('structured first-party'): score+=100
+    elif 'License Global' in reason: score+=70
+    elif 'detail URL' in reason: score+=60
+    score+=max(0,35-len(x))
+    if re.search(r'(?i)\b(logo|portrait|copy|rgb|cmyk|white|black)\b',x): score-=80
+    if '_' in x or re.search(r'\d{2,4}x\d{2,4}',x): score-=60
+    if x.isupper() and len(x)>4: score-=2
+    return score
+
+def candidate_evidence(row):
+    method=row['extraction_method']; obj=parse_obj(row['context']); raw_name=clean_text(row['canonical_name']); link=row['brand_url'] or row['brand_website'] or ''
+    out=[]
+    def add(name,quality,reason,hints=None,link_value=None):
+        name=clean_image_name(name)
+        if not noise_name(name):
+            out.append({'name':name,'normalized_name':norm(name),'quality':quality,'reason':reason,'category_hints':hints or [],'brand_url':link if link_value is None else link_value})
+    if method=='licenseglobal_client_list':
+        if not noise_name(raw_name): add(raw_name,.84,'agent-supplied License Global client list')
+        return out
+    if method=='embedded_or_network_json' and obj:
+        keys=set(obj)
+        if 'name' in obj and 'slug' in obj and any(k in obj for k in ('logo','image','regions')):
+            name=clean_text(obj.get('name'))
+            if norm(name)==norm(raw_name) and not noise_name(name,obj): add(name,.98 if 'regions' in obj and 'image' in obj else .95,'structured first-party brand object')
+            return out
+        if 'title' in obj and '/brand-licensing' in str(obj.get('brandLinkTitle','')):
+            name=clean_text(obj.get('title'))
+            if not noise_name(name,obj): add(name,.97,'structured first-party brand catalogue object')
+            return out
+        if obj.get('clientName') and any(k in obj for k in ('date','year','categories')):
+            hints=[]
+            if isinstance(obj.get('categories'),list): hints.extend(clean_text(x) for x in obj['categories'])
+            if obj.get('category'): hints.append(clean_text(obj['category']))
+            name=clean_text(obj.get('clientName'))
+            if not noise_name(name): add(name,.74,'client named in first-party article/case study',hints,'')
+            return out
+        if 'name' in obj and 'slug' in obj and len(keys)<=8 and not {'date','category','clientName'} & keys:
+            name=clean_text(obj.get('name'))
+            if norm(name)==norm(raw_name) and not noise_name(name,obj): add(name,.89,'structured name-and-slug object')
+            return out
+        if 'title' in obj and obj.get('link') and valid_detail_url(str(obj.get('link'))):
+            name=clean_text(obj.get('title')); target=urllib.parse.urljoin(row['source_url'] or '',str(obj.get('link')))
+            if not noise_name(name,obj): add(name,.86,'structured linked portfolio object',link_value=target)
+            return out
+        return out
+    name=clean_image_name(raw_name)
+    path_good=valid_detail_url(link)
+    derived=slug_name(link) if path_good else ''
+    if derived and not noise_name(derived): name=derived
+    if noise_name(name,obj) or (row['agency_name'] and norm(name)==norm(row['agency_name'])): return out
+    same_host=False
+    try: same_host=(urllib.parse.urlsplit(link).hostname or '').removeprefix('www.')==(urllib.parse.urlsplit(row['source_url']).hostname or '').removeprefix('www.')
+    except Exception: pass
+    if method=='portfolio_card':
+        if len(name.split())>8 or ARTICLE_RE.search(name) or re.search(r'(?i)/(news|blog|press|article|case-stud)',link): return out
+        if '/portfolio/' in (link or '').lower() and len(name.split())>=5 and re.search(r'(?i)\b(with|new|launch|goes|in advance|by|versus|vs)\b',name): return out
+        add(name,.91 if path_good else (.74 if link and same_host else .62),'portfolio card with detail URL' if path_good else 'portfolio card',link_value=link)
+    elif method=='semantic_anchor':
+        if path_good: add(name,.82,'portfolio anchor with detail URL',link_value=link)
+        elif link and same_host and len(name.split())<=7 and not re.search(r'(?i)/(news|blog|press|author|category|about|service)',link): add(name,.63,'same-site portfolio-related anchor',link_value=link)
+    elif method=='portfolio_image_alt' and path_good: add(name,.78,'portfolio image linked to detail page',link_value=link)
+    return out
+
+def classify_category(name,hints):
+    for h in hints:
+        k=clean_text(h).casefold()
+        if k in HINT_MAP: return HINT_MAP[k]
+    n=norm(name); scores={k:sum(1 for w in words if re.search(r'(?<![a-z0-9])'+re.escape(w)+r'(?![a-z0-9])',n)) for k,words in CATEGORY_WORDS.items()}
+    best=max(scores,key=scores.get)
+    return best if scores[best]>0 else 'other'
+
+def main():
+    ap=argparse.ArgumentParser(); ap.add_argument('--input',default='database-v2/licensing_database.sqlite'); ap.add_argument('--output',default='database-v3'); args=ap.parse_args()
+    root=Path(__file__).resolve().parents[1] if Path(__file__).parent.name=='crawler' else Path.cwd()
+    source=(root/args.input).resolve(); out=(root/args.output).resolve(); out.mkdir(parents=True,exist_ok=True)
+    dest=out/'licensing_database.sqlite'; shutil.copy2(source,dest)
+    con=sqlite3.connect(dest); con.row_factory=sqlite3.Row
+    con.executescript('''
+    DROP TABLE IF EXISTS clean_agencies; DROP TABLE IF EXISTS clean_brands; DROP TABLE IF EXISTS clean_representations; DROP TABLE IF EXISTS clean_evidence; DROP TABLE IF EXISTS quality_summary;
+    CREATE TABLE clean_agencies(id INTEGER PRIMARY KEY,canonical_name TEXT UNIQUE,normalized_name TEXT,website TEXT,region TEXT,country TEXT,description TEXT,source_count INT,represented_brand_count INT DEFAULT 0,first_party_brand_count INT DEFAULT 0,agent_list_brand_count INT DEFAULT 0,evidence_count INT DEFAULT 0,quality_status TEXT,generated_at TEXT);
+    CREATE TABLE clean_brands(id INTEGER PRIMARY KEY,canonical_name TEXT,normalized_name TEXT UNIQUE,website TEXT,category TEXT,quality_status TEXT,quality_score REAL,source_count INT,evidence_count INT,agency_count INT,first_party_evidence_count INT,travel_fit_score REAL,licensing_readiness_score REAL,preliminary_opportunity_score REAL,score_basis TEXT,generated_at TEXT);
+    CREATE TABLE clean_representations(id INTEGER PRIMARY KEY,agency_id INT,brand_id INT,relationship_status TEXT,quality_score REAL,evidence_count INT,source_count INT,brand_url TEXT,source_urls TEXT,methods TEXT,generated_at TEXT,UNIQUE(agency_id,brand_id));
+    CREATE TABLE clean_evidence(id INTEGER PRIMARY KEY,brand_id INT,agency_id INT,source_id INT,source_url TEXT,brand_url TEXT,extraction_method TEXT,quality_score REAL,evidence_reason TEXT,context TEXT,observed_at TEXT);
+    CREATE TABLE quality_summary(key TEXT PRIMARY KEY,value TEXT);
+    CREATE INDEX ix_clean_brand_score ON clean_brands(preliminary_opportunity_score DESC); CREATE INDEX ix_clean_rep_brand ON clean_representations(brand_id); CREATE INDEX ix_clean_rep_agency ON clean_representations(agency_id);
+    ''')
+    sources={r['id']:dict(r) for r in con.execute('select * from sources')}
+    old_agencies={r['id']:dict(r) for r in con.execute("select * from companies where company_type='licensing_agency'")}
+    agency_groups=defaultdict(list)
+    for row in old_agencies.values(): agency_groups[norm(canonical_agency(row['canonical_name']))].append(row)
+    for src in sources.values():
+        if src['source_type']=='agency_portfolio' and src['agency_name']:
+            agency_groups[norm(canonical_agency(src['agency_name']))].append({'id':None,'canonical_name':src['agency_name'],'website':src['base_url'],'region':src['region'],'country':src['country'],'description':src['focus'],'first_source_id':src['id'],'evidence_count':0})
+    old_to_clean={}; clean_key_to_id={}
+    for key,rows in sorted(agency_groups.items()):
+        canonical=canonical_agency(max(rows,key=lambda r:(bool(r.get('website')),len(r.get('canonical_name') or '')))['canonical_name'])
+        website=next((r.get('website') for r in rows if r.get('website')), '')
+        region=next((r.get('region') for r in rows if r.get('region')), '')
+        country=next((r.get('country') for r in rows if r.get('country')), '')
+        description=max((r.get('description') or '' for r in rows),key=len,default='')
+        srcs={r.get('first_source_id') for r in rows if r.get('first_source_id')}
+        cur=con.execute('insert into clean_agencies(canonical_name,normalized_name,website,region,country,description,source_count,evidence_count,quality_status,generated_at) values (?,?,?,?,?,?,?,?,?,?)',(canonical,key,website,region,country,description,len(srcs),sum(int(r.get('evidence_count') or 0) for r in rows),'documented_agency',NOW))
+        cid=cur.lastrowid; clean_key_to_id[key]=cid
+        for r in rows:
+            if r.get('id') is not None: old_to_clean[r['id']]=cid
+    rep_rows=con.execute('''select r.*,b.canonical_name,b.website brand_website,s.name source_name,s.source_type,s.agency_name,s.official,s.priority from representations r join brands b on b.id=r.brand_id join sources s on s.id=r.source_id''').fetchall()
+    ev=[]
+    for row in rep_rows:
+        agency_id=old_to_clean.get(row['agency_company_id'])
+        if not agency_id:
+            key=norm(canonical_agency(old_agencies.get(row['agency_company_id'],{}).get('canonical_name','')))
+            agency_id=clean_key_to_id.get(key)
+        if not agency_id: continue
+        for item in candidate_evidence(row):
+            item.update({'agency_id':agency_id,'source_id':row['source_id'],'source_name':row['source_name'],'source_url':row['source_url'],'method':row['extraction_method'],'context':(row['context'] or '')[:1000],'observed_at':row['observed_at']})
+            ev.append(item)
+    # Canonicalise all records that point to the same detail URL.
+    url_groups=defaultdict(list)
+    for i,e in enumerate(ev):
+        k=url_key(e['brand_url'])
+        if k and valid_detail_url(k): url_groups[k].append(i)
+    for k,idxs in url_groups.items():
+        choices=[ev[i] for i in idxs]
+        canonical=max(choices,key=lambda x:name_score(x['name'],x['reason']))['name']
+        if noise_name(canonical):
+            fallback=slug_name(k)
+            if fallback and not noise_name(fallback): canonical=fallback
+        for i in idxs:
+            ev[i]['name']=canonical; ev[i]['normalized_name']=norm(canonical)
+    grouped=defaultdict(list)
+    for e in ev:
+        if e['normalized_name'] and not noise_name(e['name']): grouped[e['normalized_name']].append(e)
+    clean_brand_id={}; brand_records=[]
+    for key,items in grouped.items():
+        maxq=max(x['quality'] for x in items); agency_ids={x['agency_id'] for x in items}; source_ids={x['source_id'] for x in items}; first=sum(1 for x in items if x['quality']>=.89 and x['reason']!='agent-supplied License Global client list')
+        quality=min(.99,maxq+.025*max(0,len(agency_ids)-1)+.012*max(0,len(source_ids)-1))
+        if quality>=.90 or (quality>=.84 and (first or len(source_ids)>=2)): status='high_confidence'
+        elif quality
