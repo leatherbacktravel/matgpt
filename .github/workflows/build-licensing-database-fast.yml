@@ -1,0 +1,106 @@
+name: Build Licensing Market Database Fast
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [gh-pages]
+    paths:
+      - '.github/workflows/build-licensing-database-fast.yml'
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: licensing-market-database-fast
+  cancel-in-progress: true
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - name: Check out database branch
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          fetch-depth: 1
+
+      - name: Assemble optimized crawler and source universe
+        run: |
+          cat crawler/parts/build-*.part > crawler/build_database_fast.py
+          cat crawler/parts/sources-*.part > crawler/source_registry.csv
+          sed -i "s|OUT=ROOT/'data'|OUT=ROOT/'database-v2'|" crawler/build_database_fast.py
+          sed -i "s|(6 if s\['source_type'\]=='agency_portfolio' else 3)|(2 if s['source_type']=='agency_portfolio' else 2)|" crawler/build_database_fast.py
+          python -m py_compile crawler/build_database_fast.py
+          test "$(wc -l < crawler/source_registry.csv)" -ge 90
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install crawler dependencies
+        run: |
+          python -m pip install --disable-pip-version-check \
+            requests==2.32.5 beautifulsoup4==4.13.5 lxml==6.0.1 playwright==1.55.0
+          python -m playwright install --with-deps chromium
+
+      - name: Crawl every registered public licensing source
+        env:
+          PYTHONUNBUFFERED: '1'
+        run: |
+          python crawler/build_database_fast.py --concurrency 8 --browser-concurrency 4 2>&1 | tee /tmp/licensing-crawl-fast.log
+
+      - name: Validate populated database
+        run: |
+          python - <<'PY'
+          import json, sqlite3
+          from pathlib import Path
+          db = Path('database-v2/licensing_database.sqlite')
+          assert db.exists() and db.stat().st_size > 50_000, db
+          conn = sqlite3.connect(db)
+          assert conn.execute('pragma integrity_check').fetchone()[0] == 'ok'
+          checks = {
+              'sources': conn.execute('select count(*) from sources').fetchone()[0],
+              'pages': conn.execute('select count(*) from pages').fetchone()[0],
+              'companies': conn.execute('select count(*) from companies').fetchone()[0],
+              'agencies': conn.execute("select count(*) from companies where company_type='licensing_agency'").fetchone()[0],
+              'brands': conn.execute('select count(*) from brands').fetchone()[0],
+              'representations': conn.execute('select count(*) from representations').fetchone()[0],
+              'evidence': conn.execute('select count(*) from evidence').fetchone()[0],
+          }
+          print(json.dumps(checks, indent=2))
+          assert checks['sources'] >= 90, checks
+          assert checks['agencies'] >= 70, checks
+          assert checks['pages'] > 0, checks
+          assert checks['brands'] > 0, checks
+          assert checks['evidence'] > 0, checks
+          conn.close()
+          PY
+
+      - name: Remove bulky raw captures from published branch
+        run: rm -rf database-v2/raw
+
+      - name: Commit populated database and exports
+        run: |
+          git config user.name 'Leatherback Licensing Database Bot'
+          git config user.email 'matthew@leatherbacktravel.com'
+          git pull --rebase origin gh-pages
+          git add -A database-v2
+          if git diff --cached --quiet; then
+            echo 'No database changes to commit.'
+          else
+            git commit -m "Publish populated licensing market database"
+            git push origin HEAD:gh-pages
+          fi
+
+      - name: Upload crawl log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: licensing-crawl-fast-log
+          path: /tmp/licensing-crawl-fast.log
+          retention-days: 14
+          if-no-files-found: ignore
